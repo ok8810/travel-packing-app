@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>旅の持ち物リアルタイム同期テスト</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-gray-50 min-h-screen py-8 px-4">
+
+    <div class="max-w-md mx-auto bg-white rounded-xl shadow-md p-6">
+        <h1 class="text-xl font-bold text-gray-800 mb-2">🧳 持ち物リアルタイム同期</h1>
+        <p class="text-xs text-gray-500 mb-6">スマホや別ブラウザで同時に開いて、チェックの同期をテストしてください。</p>
+
+        <div class="mb-6">
+            <div class="flex justify-between text-sm font-medium text-gray-600 mb-1">
+                <span>パッキング進捗</span>
+                <span id="progress-text">0%</span>
+            </div>
+            <div class="w-full bg-gray-200 rounded-full h-2.5">
+                <div id="progress-bar" class="bg-blue-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+            </div>
+        </div>
+
+        <div id="loading" class="text-center text-gray-500 text-sm py-4">データを読み込み中...</div>
+        <ul id="packing-list" class="space-y-3 hidden">
+            </ul>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
