@@ -28,9 +28,8 @@
       
       <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
         <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-600">
-          <i class="fa-solid fa-suitcase"></i> 持ち物リアルタイム同期
+          <i class="fa-solid fa-suitcase"></i> 持ち物リスト
         </h1>
-        <p class="text-xs text-slate-400 mt-1">スマホや別ブラウザで同時に開いてテストしてください。</p>
         
         <div class="mt-4">
           <div class="flex justify-between text-sm font-semibold text-slate-600 mb-1">
@@ -40,6 +39,8 @@
           <div class="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
             <div id="progress-bar" class="bg-indigo-500 h-full w-0 transition-all duration-300"></div>
           </div>
+          <div id="generated-condition-text" class="text-[11px] font-medium text-slate-400 bg-slate-50/50 rounded-lg p-2 border border-slate-100/50 hidden">
+            </div>
         </div>
       </div>
 
