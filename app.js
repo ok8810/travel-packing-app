@@ -1,8 +1,10 @@
 // 1. Supabaseの初期化設定（あなたのプロジェクトのキーに書き換えてください）
-const SUPABASE_URL = 'https://wexmfasuheekporlgcbf.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndleG1mYXN1aGVla3BvcmxnY2JmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwMTYwMjIsImV4cCI6MjA5NjU5MjAyMn0.VSWvnIMb_RpsiukTj7WRYk4V1VuQ6aIZF3bJ9nuxgwc';
+const YOUR_SUPABASE_URL = 'https://wexmfasuheekporlgcbf.supabase.co';
+const YOUR_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndleG1mYXN1aGVla3BvcmxnY2JmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwMTYwMjIsImV4cCI6MjA5NjU5MjAyMn0.VSWvnIMb_RpsiukTj7WRYk4V1VuQ6aIZF3bJ9nuxgwc';
 
-const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// ここを「supabase」ではなく「SupabaseClient」など別名で受け取るように修正します
+const SupabaseClient = window.supabase;
+const supabase = SupabaseClient.createClient(YOUR_SUPABASE_URL, YOUR_SUPABASE_ANON_KEY);
 
 // HTMLの要素（部品）を取得
 const listContainer = document.getElementById('packing-list');
