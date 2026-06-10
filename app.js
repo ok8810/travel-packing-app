@@ -253,6 +253,7 @@ async function fetchCurrentList() {
   updateProgress();
 }
 
+
 // ==========================================
 // 5. マスターから計算して新規リストを生成（上書き）するロジック
 // ==========================================
@@ -263,7 +264,13 @@ async function generateListFromTemplates() {
     return;
   }
   
+  // 選択されたテンプレートのIDと名前を取得
   const selectedTemplateIds = Array.from(checkedBoxes).map(box => box.value);
+  const selectedTemplateNames = Array.from(checkedBoxes).map(box => {
+    // チェックボックスの親要素や隣のspanからテキストを拾う
+    return box.nextElementSibling ? box.nextElementSibling.textContent.trim() : "不明なリスト";
+  });
+
   const nights = parseInt(stayNightsInput.value) || 1;
 
   if (!confirm(`選択された要素と「${nights}泊」の条件で、現在のリストをリセットして新しく作り直します。よろしいですか？`)) {
@@ -323,7 +330,27 @@ async function generateListFromTemplates() {
 
     if (insertError) throw insertError;
 
-    // リスト作成完了後、自動的に作成画面側を表示させたままにするためリストを再取得
+    // ✨【新規追加】生成条件を組み立てて進捗バーの下に表示させる
+    const conditionContainer = document.getElementById("generated-condition-text");
+    if (conditionContainer) {
+      const templateListText = selectedTemplateNames.join(" ＋ ");
+      const daysText = nights === 1 && templateListText.includes("ピクニック") ? "日帰り" : `${nights}泊${nights + 1}日`;
+      
+      conditionContainer.innerHTML = `
+        <div class="flex items-start gap-1">
+          <i class="fa-solid fa-info-circle text-indigo-400 mt-0.5"></i>
+          <div>
+            <span class="font-bold text-slate-500">現在の作成条件:</span><br>
+            <span class="text-slate-600 font-semibold">${templateListText}</span> 
+            <span class="mx-1 text-slate-300">|</span> 
+            <span class="bg-indigo-50 text-indigo-600 px-1.5 py-0.2 rounded font-bold">${daysText}</span>
+          </div>
+        </div>
+      `;
+      conditionContainer.classList.remove("hidden"); // 非表示を解除して見せる
+    }
+
+    // リストを再取得
     await fetchCurrentList();
 
   } catch (err) {
@@ -334,6 +361,7 @@ async function generateListFromTemplates() {
     btnGenerate.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> この条件でリストを作成・上書き`;
   }
 }
+
 
 // ==========================================
 // 6. チェックのON/OFF切り替え
