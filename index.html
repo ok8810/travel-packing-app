@@ -1,33 +1,70 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>旅の持ち物リアルタイム同期テスト</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>家族の持ち物リスト作成アプリ</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    .checkbox-large { transform: scale(1.3); }
+    .checked-item { text-decoration: line-through; color: #9ca3af; }
+  </style>
 </head>
-<body class="bg-gray-50 min-h-screen py-8 px-4">
+<body class="bg-slate-50 text-slate-800 min-h-screen pb-12">
 
-    <div class="max-w-md mx-auto bg-white rounded-xl shadow-md p-6">
-        <h1 class="text-xl font-bold text-gray-800 mb-2">🧳 持ち物リアルタイム同期</h1>
-        <p class="text-xs text-gray-500 mb-6">スマホや別ブラウザで同時に開いて、チェックの同期をテストしてください。</p>
-
-        <div class="mb-6">
-            <div class="flex justify-between text-sm font-medium text-gray-600 mb-1">
-                <span>パッキング進捗</span>
-                <span id="progress-text">0%</span>
-            </div>
-            <div class="w-full bg-gray-200 rounded-full h-2.5">
-                <div id="progress-bar" class="bg-blue-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
-            </div>
+  <div class="max-w-md mx-auto px-4 pt-6">
+    <div class="bg-white rounded-2xl p-5 shadow-sm mb-4 border border-slate-100">
+      <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-600">
+        <i class="fa-solid fa-suitcase"></i> 持ち物リアルタイム同期
+      </h1>
+      <p class="text-xs text-slate-400 mt-1">スマホや別ブラウザで同時に開いてテストしてください。</p>
+      
+      <div class="mt-4">
+        <div class="flex justify-between text-sm font-semibold text-slate-600 mb-1">
+          <span>パッキング進捗</span>
+          <span id="progress-text">0%</span>
         </div>
-
-        <div id="loading" class="text-center text-gray-500 text-sm py-4">データを読み込み中...</div>
-        <ul id="packing-list" class="space-y-3 hidden">
-            </ul>
+        <div class="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
+          <div id="progress-bar" class="bg-indigo-500 h-full w-0 transition-all duration-300"></div>
+        </div>
+      </div>
     </div>
 
-    <script src="app.js"></script>
+    <div class="bg-white rounded-2xl p-5 shadow-sm mb-6 border border-slate-100">
+      <h2 class="text-sm font-bold text-slate-700 mb-3 flex items-center gap-1">
+        <i class="fa-solid fa-sliders text-indigo-500"></i> リスト自動生成パネル
+      </h2>
+      
+      <div class="space-y-2 mb-4">
+        <label class="block text-xs font-bold text-slate-500">1. 必要リストにチェック（複数可）</label>
+        <div id="template-options" class="grid grid-cols-2 gap-2 text-sm">
+          <div class="text-slate-400 text-xs py-2">テンプレート読み込み中...</div>
+        </div>
+      </div>
+
+      <div class="mb-4">
+        <label for="stay-nights" class="block text-xs font-bold text-slate-500 mb-1">2. 何泊しますか？（日帰りの場合は1）</label>
+        <div class="flex items-center gap-2">
+          <input type="number" id="stay-nights" value="1" min="1" class="w-20 px-3 py-1.5 border border-slate-200 rounded-lg text-center font-bold text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          <span class="text-sm font-bold text-slate-600">泊 <span class="text-xs font-normal text-slate-400">（<span id="stay-days">2</span>泊3日）</span></span>
+        </div>
+      </div>
+
+      <button id="btn-generate" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-4 rounded-xl shadow-md transition duration-200 flex items-center justify-center gap-2 text-sm cursor-pointer">
+        <i class="fa-solid fa-wand-magic-sparkles"></i> この条件でリストを作成・上書き
+      </button>
+    </div>
+
+    <div id="list-container" class="space-y-6">
+      <div class="text-center py-8 text-slate-400">
+        <i class="fa-solid fa-circle-notch animate-spin text-2xl text-indigo-400 mb-2"></i>
+        <p class="text-sm">データを読み込み中...</p>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
 </body>
 </html>
