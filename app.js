@@ -125,7 +125,7 @@ async function generateListFromTemplates() {
   try {
     const { data: masterItems, error: masterError } = await supabaseClient
       .from("template_items")
-      .select("*")                             // ←これを追加
+      .select("*") 
       .in("template_id", selectedTemplateIds);
 
     if (masterError) throw masterError;
