@@ -4,8 +4,8 @@
 // ==========================================
 const SUPABASE_URL = 'https://wexmfasuheekporlgcbf.supabase.co'; 
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndleG1mYXN1aGVla3BvcmxnY2JmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwMTYwMjIsImV4cCI6MjA5NjU5MjAyMn0.VSWvnIMb_RpsiukTj7WRYk4V1VuQ6aIZF3bJ9nuxgwc'; 
-  
-// HTMLとの競合(すでにあるグローバル変数名)を避けるため、「supabaseClient」という名前で新しく定義します
+
+// グローバル競合を避ける名前でクライアントを初期化
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // HTML要素の取得
@@ -24,6 +24,8 @@ let currentItems = [];
 // 2. 初期化処理 (読み込み時に動くもの)
 // ==========================================
 document.addEventListener("DOMContentLoaded", async () => {
+  console.log("持ち物アプリ: 修正版ロジック起動");
+
   // 1. 泊数入力の連動変更 (例: 2泊 → 3日)
   if (stayNightsInput) {
     stayNightsInput.addEventListener("input", () => {
@@ -117,12 +119,10 @@ async function generateListFromTemplates() {
     return;
   }
 
-  // ボタンをローディング表示にする
   btnGenerate.disabled = true;
   btnGenerate.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin"></i> 生成中...`;
 
   try {
-    // ステップA: 選択されたすべてのマスターアイテムを `template_items` から一元取得
     const { data: masterItems, error: masterError } = await supabaseClient
       .from("template_items")
       .in("template_id", selectedTemplateIds);
@@ -131,18 +131,12 @@ async function generateListFromTemplates() {
 
     if (!masterItems || masterItems.length === 0) {
       alert("選ばれたテンプレートの中に持ち物データが見つかりませんでした。");
-      btnGenerate.disabled = false;
-      btnGenerate.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> この条件でリストを作成・上書き`;
       return;
     }
 
-    // ステップB: 同名・同カテゴリのアイテムを合算（重複排除）
     const mergedMap = new Map();
-
     masterItems.forEach(item => {
       const key = `${item.category}_${item.item_name}`;
-
-      // 泊数に応じた数量計算ルール: 初期数量 + (追加数量 × (泊数 - 1))
       const extraNights = nights - 1;
       const computedQuantity = item.quantity + (item.extra_quantity_per_night * (extraNights > 0 ? extraNights : 0));
 
@@ -162,22 +156,21 @@ async function generateListFromTemplates() {
 
     const newRecordsToInsert = Array.from(mergedMap.values());
 
-    // ステップC: 現在の `trip_list_items` テーブルの中身を一度すべて削除
+    // テーブルの全削除
     const { error: deleteError } = await supabaseClient
       .from("trip_list_items")
       .delete()
-      .neq("id", 0); // 全削除のための条件指定
+      .neq("id", 0);
 
     if (deleteError) throw deleteError;
 
-    // ステップD: 計算済みの合算データを一括でインサート
+    // 新データの一括インサート
     const { error: insertError } = await supabaseClient
       .from("trip_list_items")
       .insert(newRecordsToInsert);
 
     if (insertError) throw insertError;
 
-    // 最新リストを取得
     await fetchCurrentList();
 
   } catch (err) {
@@ -218,7 +211,6 @@ function renderChecklist() {
     return;
   }
 
-  // カテゴリごとにグループ化
   const grouped = {};
   currentItems.forEach(item => {
     if (!grouped[item.category]) {
@@ -293,4 +285,15 @@ function updateProgress() {
   progressText.textContent = `${percent}%`;
 }
 
-// =================================
+// ==========================================
+// 9. リアルタイム同期設定 (関数を確実に定義)
+// ==========================================
+function setupRealtimeSubscription() {
+  console.log("リアルタイム同期を開始します...");
+  supabaseClient
+    .channel("public:trip_list_items")
+    .on("postgres_changes", { event: "*", pattern: "public", table: "trip_list_items" }, () => {
+      fetchCurrentList();
+    })
+    .subscribe();
+}
