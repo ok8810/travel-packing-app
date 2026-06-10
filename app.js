@@ -1,10 +1,9 @@
 // 1. Supabaseの初期化設定（あなたのプロジェクトのキーに書き換えてください）
-const YOUR_SUPABASE_URL = 'https://wexmfasuheekporlgcbf.supabase.co';
-const YOUR_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndleG1mYXN1aGVla3BvcmxnY2JmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwMTYwMjIsImV4cCI6MjA5NjU5MjAyMn0.VSWvnIMb_RpsiukTj7WRYk4V1VuQ6aIZF3bJ9nuxgwc';
+const MY_SUPABASE_PROJECT_URL = 'https://wexmfasuheekporlgcbf.supabase.co';
+const MY_SUPABASE_ANON_PUBLIC_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndleG1mYXN1aGVla3BvcmxnY2JmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwMTYwMjIsImV4cCI6MjA5NjU5MjAyMn0.VSWvnIMb_RpsiukTj7WRYk4V1VuQ6aIZF3bJ9nuxgwc';
 
-// ここを「supabase」ではなく「SupabaseClient」など別名で受け取るように修正します
-const SupabaseClient = window.supabase;
-const supabase = SupabaseClient.createClient(YOUR_SUPABASE_URL, YOUR_SUPABASE_ANON_KEY);
+// ライブラリを直接指定して接続し、世界で一つだけの変数名「mySupabaseDB」を作ります
+const mySupabaseDB = window.supabase.createClient(MY_SUPABASE_PROJECT_URL, MY_SUPABASE_ANON_PUBLIC_KEY);
 
 // HTMLの要素（部品）を取得
 const listContainer = document.getElementById('packing-list');
@@ -14,16 +13,13 @@ const progressText = document.getElementById('progress-text');
 
 // アプリ起動時に最初に実行する処理
 async function initApp() {
-    // 最初にデータベースから現在の持ち物データを全件取得する
     await fetchItems();
-    // 誰かがデータを書き換えたら、すぐに画面を更新する「リアルタイム監視」を開始
     setupRealtimeSubscription();
 }
 
 // データベースからデータを取得して画面に描画する関数
 async function fetchItems() {
-    // trip_list_items テーブルからデータを取得（便宜上、今回は全件取得）
-    const { data: items, error } = await supabase
+    const { data: items, error } = await mySupabaseDB
         .from('trip_list_items')
         .select('*')
         .order('item_name', { ascending: true });
@@ -33,10 +29,8 @@ async function fetchItems() {
         return;
     }
 
-    // 画面のリストを一旦空にする
     listContainer.innerHTML = '';
 
-    // 取得したデータを1つずつ画面に組み立てていく
     items.forEach(item => {
         const li = document.createElement('li');
         li.className = `flex items-center p-3 rounded-lg border transition-all ${
@@ -56,17 +50,15 @@ async function fetchItems() {
         listContainer.appendChild(li);
     });
 
-    // ローディング表示を消して、リストを表示
     loadingElement.classList.add('hidden');
     listContainer.classList.remove('hidden');
 
-    // 進捗バーの計算と更新
     updateProgressBar(items);
 }
 
 // チェックボックスが押されたときにデータベースを更新する関数
 async function toggleCheck(itemId, isChecked) {
-    const { error } = await supabase
+    const { error } = await mySupabaseDB
         .from('trip_list_items')
         .update({ is_checked: isChecked })
         .eq('id', itemId);
@@ -86,20 +78,19 @@ function updateProgressBar(items) {
     progressText.innerText = `${percentage}%`;
 }
 
-// 【超重要】他端末での変更を秒速で検知して画面を自動更新する設定
+// 他端末での変更を秒速で検知して画面を自動更新する設定
 function setupRealtimeSubscription() {
-    supabase
+    mySupabaseDB
         .channel('schema-db-changes')
         .on(
             'postgres_changes',
             {
-                event: '*', // 追加・更新・削除すべてのイベントを監視
+                event: '*',
                 schema: 'public',
                 table: 'trip_list_items'
             },
             (payload) => {
                 console.log('データベースに変更を検知しました！画面を再読込します。', payload);
-                // 変更を検知したら、自動的に最新データを再取得して画面を書き換える
                 fetchItems();
             }
         )
