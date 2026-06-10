@@ -1,8 +1,18 @@
-// 1. Supabaseの初期化設定（あなたのプロジェクトのキーに書き換えてください）
-const SUPABASE_URL = 'https://wexmfasuheekporlgcbf.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndleG1mYXN1aGVla3BvcmxnY2JmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwMTYwMjIsImV4cCI6MjA5NjU5MjAyMn0.VSWvnIMb_RpsiukTj7WRYk4V1VuQ6aIZF3bJ9nuxgwc';
 
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// ==========================================
+// 1. Supabase 初期設定 
+// ==========================================
+// すでにindex.html等で宣言されている場合は再宣言(const)せずに代入のみ行います
+if (typeof supabase === 'undefined') {
+  const SUPABASE_URL = 'https://wexmfasuheekporlgcbf.supabase.co'; 
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndleG1mYXN1aGVla3BvcmxnY2JmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwMTYwMjIsImV4cCI6MjA5NjU5MjAyMn0.VSWvnIMb_RpsiukTj7WRYk4V1VuQ6aIZF3bJ9nuxgwc'; 
+  window.supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  var supabase = window.supabaseClient;
+} else {
+  // すでに存在している場合は、既存の supabase インスタンスをそのまま利用します
+  console.log("Supabase is already initialized.");
+}
+
 
 // HTML要素の取得
 const templateOptionsContainer = document.getElementById("template-options");
