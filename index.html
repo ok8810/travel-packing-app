@@ -15,6 +15,28 @@
 <body class="bg-slate-50 text-slate-800 min-h-screen pb-12">
 
   <div class="max-w-md mx-auto px-4 pt-6">
+    <div class="flex border-b border-slate-200 mb-6 bg-slate-50 p-1.5 rounded-xl">
+      <button id="tab-create" class="flex-1 py-2 px-4 rounded-lg font-bold text-sm bg-white text-indigo-600 shadow-sm transition">
+        <i class="fa-solid fa-wand-magic-sparkles mr-1.5"></i>リストを作成
+      </button>
+      <button id="tab-view" class="flex-1 py-2 px-4 rounded-lg font-bold text-sm text-slate-500 hover:text-slate-800 transition">
+        <i class="fa-solid fa-eye mr-1.5"></i>テンプレートを確認
+      </button>
+    </div>
+
+    <div id="create-mode-area" class="space-y-6">
+      </div>
+
+    <div id="view-mode-area" class="hidden space-y-4">
+      <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
+        <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">確認するテンプレートを選択</label>
+        <select id="view-template-select" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400">
+          </select>
+      </div>
+
+      <div id="view-template-content" class="space-y-4"></div>
+    </div>
+    
     <div class="bg-white rounded-2xl p-5 shadow-sm mb-4 border border-slate-100">
       <h1 class="text-xl font-bold flex items-center gap-2 text-indigo-600">
         <i class="fa-solid fa-suitcase"></i> 持ち物リアルタイム同期
