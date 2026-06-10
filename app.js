@@ -5,7 +5,6 @@
 const SUPABASE_URL = 'https://wexmfasuheekporlgcbf.supabase.co'; 
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndleG1mYXN1aGVla3BvcmxnY2JmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwMTYwMjIsImV4cCI6MjA5NjU5MjAyMn0.VSWvnIMb_RpsiukTj7WRYk4V1VuQ6aIZF3bJ9nuxgwc'; 
 
-// グローバル競合を避ける名前でクライアントを初期化
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // HTML要素の取得
@@ -17,16 +16,25 @@ const listContainer = document.getElementById("list-container");
 const progressBar = document.getElementById("progress-bar");
 const progressText = document.getElementById("progress-text");
 
+// 【新規】タブ・確認モード用の要素
+const tabCreate = document.getElementById("tab-create");
+const tabView = document.getElementById("tab-view");
+const createModeArea = document.getElementById("create-mode-area");
+const viewModeArea = document.getElementById("view-mode-area");
+const viewTemplateSelect = document.getElementById("view-template-select");
+const viewTemplateContent = document.getElementById("view-template-content");
+
 // アプリ内状態管理
 let currentItems = [];
+let allTemplates = []; // 読み込んだテンプレート一覧を保持
 
 // ==========================================
 // 2. 初期化処理 (読み込み時に動くもの)
 // ==========================================
 document.addEventListener("DOMContentLoaded", async () => {
-  console.log("持ち物アプリ: 修正版ロジック起動");
+  console.log("持ち物アプリ: 確認機能付きロジック起動");
 
-  // 1. 泊数入力の連動変更 (例: 2泊 → 3日)
+  // 1. 泊数入力の連動変更
   if (stayNightsInput) {
     stayNightsInput.addEventListener("input", () => {
       const nights = parseInt(stayNightsInput.value) || 1;
@@ -34,27 +42,63 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
-  // 2. マスターテンプレート一覧の取得とチェックボックス描画
+  // 2. モード切り替えタブのイベント設定
+  setupTabEvents();
+
+  // 3. マスターテンプレート一覧の取得（作成用と確認用の両方に分配）
   await loadTemplates();
 
-  // 3. 現在のチェックリストの初回読み込み
+  // 4. 確認用ドロップダウンが変更された時のイベント
+  if (viewTemplateSelect) {
+    viewTemplateSelect.addEventListener("change", (e) => {
+      renderTemplateDetails(e.target.value);
+    });
+  }
+
+  // 5. 現在のチェックリストの初回読み込み
   await fetchCurrentList();
 
-  // 4. Supabaseのリアルタイム同期 (Realtime) を開始
+  // 6. Supabaseのリアルタイム同期を開始
   setupRealtimeSubscription();
 
-  // 5. ボタンイベント設定
+  // 7. ボタンイベント設定
   if (btnGenerate) {
     btnGenerate.addEventListener("click", generateListFromTemplates);
   }
 });
 
 // ==========================================
-// 3. テンプレート一覧を読み込んでUIに表示
+// 【新規】タブ切り替えのUI制御
+// ==========================================
+function setupTabEvents() {
+  if (!tabCreate || !tabView || !createModeArea || !viewModeArea) return;
+
+  tabCreate.addEventListener("click", () => {
+    // リスト作成モードをアクティブに
+    tabCreate.className = "flex-1 py-2 px-4 rounded-lg font-bold text-sm bg-white text-indigo-600 shadow-sm transition";
+    tabView.className = "flex-1 py-2 px-4 rounded-lg font-bold text-sm text-slate-500 hover:text-slate-800 transition";
+    createModeArea.classList.remove("hidden");
+    viewModeArea.classList.add("hidden");
+  });
+
+  tabView.addEventListener("click", () => {
+    // テンプレート確認モードをアクティブに
+    tabView.className = "flex-1 py-2 px-4 rounded-lg font-bold text-sm bg-white text-indigo-600 shadow-sm transition";
+    tabCreate.className = "flex-1 py-2 px-4 rounded-lg font-bold text-sm text-slate-500 hover:text-slate-800 transition";
+    createModeArea.classList.add("hidden");
+    viewModeArea.classList.remove("hidden");
+
+    // 確認画面を開いた時、選択されているテンプレートの詳細を初回描画
+    if (viewTemplateSelect && viewTemplateSelect.value) {
+      renderTemplateDetails(viewTemplateSelect.value);
+    }
+  });
+}
+
+// ==========================================
+// 3. テンプレート一覧を読み込んでUIに表示 (分配処理に拡張)
 // ==========================================
 async function loadTemplates() {
-  if (!templateOptionsContainer) return;
-
   const { data: templates, error } = await supabaseClient
     .from("templates")
     .select("*")
@@ -62,23 +106,130 @@ async function loadTemplates() {
 
   if (error) {
     console.error("テンプレート取得エラー:", error);
-    templateOptionsContainer.innerHTML = `<div class="text-red-500 text-xs">読み込みに失敗しました</div>`;
+    if (templateOptionsContainer) templateOptionsContainer.innerHTML = `<div class="text-red-500 text-xs">読み込みに失敗しました</div>`;
     return;
   }
 
-  templateOptionsContainer.innerHTML = "";
-  if (templates && templates.length > 0) {
-    templates.forEach(tpl => {
-      const label = document.createElement("label");
-      label.className = "flex items-center gap-2 p-2 bg-slate-50 border border-slate-100 rounded-lg cursor-pointer hover:bg-slate-100 transition";
-      label.innerHTML = `
-        <input type="checkbox" name="template-select" value="${tpl.id}" class="rounded text-indigo-600 focus:ring-indigo-400">
-        <span class="font-medium text-slate-700">${tpl.name}</span>
+  allTemplates = templates || [];
+
+  // --- A. 従来の「作成パネル」へのチェックボックス描画 ---
+  if (templateOptionsContainer) {
+    templateOptionsContainer.innerHTML = "";
+    if (allTemplates.length > 0) {
+      allTemplates.forEach(tpl => {
+        const label = document.createElement("label");
+        label.className = "flex items-center gap-2 p-2 bg-slate-50 border border-slate-100 rounded-lg cursor-pointer hover:bg-slate-100 transition";
+        label.innerHTML = `
+          <input type="checkbox" name="template-select" value="${tpl.id}" class="rounded text-indigo-600 focus:ring-indigo-400">
+          <span class="font-medium text-slate-700">${tpl.name}</span>
+        `;
+        templateOptionsContainer.appendChild(label);
+      });
+    } else {
+      templateOptionsContainer.innerHTML = `<div class="text-slate-400 text-xs py-2">有効なテンプレートがありません</div>`;
+    }
+  }
+
+  // --- B. 【新規】「確認パネル」のセレクトボックスへの挿入 ---
+  if (viewTemplateSelect) {
+    viewTemplateSelect.innerHTML = allTemplates.map(tpl => 
+      `<option value="${tpl.id}">${tpl.name}</option>`
+    ).join("");
+  }
+}
+
+// ==========================================
+// 【新規】選択したマスターテンプレートの中身を取得して描画
+// ==========================================
+async function renderTemplateDetails(templateId) {
+  if (!viewTemplateContent || !templateId) return;
+
+  viewTemplateContent.innerHTML = `
+    <div class="text-center py-8 text-slate-400">
+      <i class="fa-solid fa-circle-notch animate-spin text-xl mb-2 text-indigo-400"></i>
+      <p class="text-xs">マスターデータを読み込み中...</p>
+    </div>`;
+
+  // 選択されたテンプレートに紐づくアイテムをすべて取得
+  const { data: items, error } = await supabaseClient
+    .from("template_items")
+    .select("*")
+    .eq("template_id", templateId)
+    .order("category", { ascending: true })
+    .order("id", { ascending: true });
+
+  if (error) {
+    console.error("テンプレートアイテムの取得失敗:", error);
+    viewTemplateContent.innerHTML = `<div class="text-red-500 text-sm p-4">データの取得に失敗しました。</div>`;
+    return;
+  }
+
+  if (!items || items.length === 0) {
+    viewTemplateContent.innerHTML = `
+      <div class="bg-white rounded-2xl p-6 text-center border border-slate-100 text-slate-400 shadow-sm">
+        <p class="text-sm">このテンプレートには持ち物アイテムが登録されていません。</p>
+      </div>`;
+    return;
+  }
+
+  // カテゴリ（誰）ごとにグループ化
+  const grouped = {};
+  items.forEach(item => {
+    if (!grouped[item.category]) {
+      grouped[item.category] = [];
+    }
+    grouped[item.category].push(item);
+  });
+
+  viewTemplateContent.innerHTML = "";
+
+  // カテゴリごとにカード形式でテーブルを描画
+  for (const category in grouped) {
+    const card = document.createElement("div");
+    card.className = "bg-white rounded-2xl p-5 shadow-sm border border-slate-100 mb-4";
+    
+    // カードヘッダー（家族の誰か）
+    const header = document.createElement("h4");
+    header.className = "text-sm font-bold text-slate-800 mb-3 pb-2 border-b border-slate-100 flex items-center justify-between";
+    header.innerHTML = `
+      <span><i class="fa-solid fa-user text-indigo-400 mr-2"></i>${category}</span>
+      <span class="text-xs text-slate-400 font-normal">登録数: ${grouped[category].length}件</span>
+    `;
+    card.appendChild(header);
+
+    // 持ち物一覧テーブルの構築
+    const tableWrapper = document.createElement("div");
+    tableWrapper.className = "overflow-x-auto";
+    
+    let tableHtml = `
+      <table class="w-full text-left text-xs text-slate-600">
+        <thead>
+          <tr class="text-slate-400 font-semibold border-b border-slate-50">
+            <th class="py-2">持ち物</th>
+            <th class="py-2 text-center w-16">初期数量</th>
+            <th class="py-2 text-center w-24">1泊増えたら</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-50">
+    `;
+
+    grouped[category].forEach(item => {
+      // 1泊増えたらの数値が0なら「-」にするなど見やすく配置
+      const extraText = item.extra_quantity_per_night > 0 ? `+${item.extra_quantity_per_night} ${item.unit}` : `<span class="text-slate-300">-</span>`;
+      tableHtml += `
+        <tr class="hover:bg-slate-50/50">
+          <td class="py-2 font-medium text-slate-700">${item.item_name}</td>
+          <td class="py-2 text-center text-slate-600 font-bold">${item.quantity} ${item.unit}</td>
+          <td class="py-2 text-center font-semibold text-indigo-500">${extraText}</td>
+        </tr>
       `;
-      templateOptionsContainer.appendChild(label);
     });
-  } else {
-    templateOptionsContainer.innerHTML = `<div class="text-slate-400 text-xs py-2">有効なテンプレートがありません</div>`;
+
+    tableHtml += `</tbody></table>`;
+    tableWrapper.innerHTML = tableHtml;
+    card.appendChild(tableWrapper);
+    
+    viewTemplateContent.appendChild(card);
   }
 }
 
@@ -123,7 +274,6 @@ async function generateListFromTemplates() {
   btnGenerate.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin"></i> 生成中...`;
 
   try {
-    // 1. 選択されたすべてのマスターアイテムを template_items から取得
     const { data: masterItems, error: masterError } = await supabaseClient
       .from("template_items")
       .select("*")
@@ -138,13 +288,9 @@ async function generateListFromTemplates() {
       return;
     }
 
-    // 2. 同名・同カテゴリのアイテムを合算（重複排除）
     const mergedMap = new Map();
-
     masterItems.forEach(item => {
       const key = `${item.category}_${item.item_name}`;
-
-      // 泊数に応じた数量計算ルール: 初期数量 + (追加数量 × (泊数 - 1))
       const extraNights = nights - 1;
       const computedQuantity = item.quantity + (item.extra_quantity_per_night * (extraNights > 0 ? extraNights : 0));
 
@@ -152,7 +298,6 @@ async function generateListFromTemplates() {
         const existing = mergedMap.get(key);
         existing.quantity += computedQuantity;
       } else {
-        // 余計なIDなどを排除し、データベースの列名と100%一致する綺麗なオブジェクトを作る
         mergedMap.set(key, {
           category: item.category,
           item_name: item.item_name,
@@ -165,36 +310,24 @@ async function generateListFromTemplates() {
 
     const newRecordsToInsert = Array.from(mergedMap.values());
 
-    console.log("インサートを試みるデータ:", newRecordsToInsert);
-
-    // 3. 現在の trip_list_items テーブルの中身を一度すべて削除
-    // UUID型テーブルで最も安全かつバグを起こさずに全削除を行う確実な指定です
     const { error: deleteError } = await supabaseClient
       .from("trip_list_items")
       .delete()
-      .gt("id", "00000000-0000-0000-0000-000000000000"); 
+      .gt("id", "00000000-0000-0000-0000-000000000000");
 
-    if (deleteError) {
-      console.error("削除フェーズでエラー:", deleteError);
-      throw deleteError;
-    }
+    if (deleteError) throw deleteError;
 
-    // 4. 計算済みの合算データを一括でインサート
     const { error: insertError } = await supabaseClient
       .from("trip_list_items")
       .insert(newRecordsToInsert);
 
-    if (insertError) {
-      console.error("インサートフェーズでエラー詳細:", insertError); // 💥 ここでエラーオブジェクトの正体をコンソールに暴きます
-      throw insertError;
-    }
+    if (insertError) throw insertError;
 
-    // 最新リストを再取得して描画
+    // リスト作成完了後、自動的に作成画面側を表示させたままにするためリストを再取得
     await fetchCurrentList();
 
   } catch (err) {
     console.error("生成プロセス全体でエラー発生:", err);
-    // エラーがオブジェクトの場合は文字列化してアラートに出す
     alert("エラーが発生しました: " + (err.message || JSON.stringify(err)));
   } finally {
     btnGenerate.disabled = false;
@@ -202,9 +335,8 @@ async function generateListFromTemplates() {
   }
 }
 
-
 // ==========================================
-// 6. チェックのON/OFF切り替え（Supabase送信）
+// 6. チェックのON/OFF切り替え
 // ==========================================
 async function toggleItemCheck(id, currentStatus) {
   const { error } = await supabaseClient
@@ -307,10 +439,9 @@ function updateProgress() {
 }
 
 // ==========================================
-// 9. リアルタイム同期設定 (関数を確実に定義)
+// 9. リアルタイム同期設定
 // ==========================================
 function setupRealtimeSubscription() {
-  console.log("リアルタイム同期を開始します...");
   supabaseClient
     .channel("public:trip_list_items")
     .on("postgres_changes", { event: "*", pattern: "public", table: "trip_list_items" }, () => {
