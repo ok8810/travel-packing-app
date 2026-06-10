@@ -123,21 +123,28 @@ async function generateListFromTemplates() {
   btnGenerate.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin"></i> 生成中...`;
 
   try {
+    // 1. 選択されたすべてのマスターアイテムを template_items から取得
     const { data: masterItems, error: masterError } = await supabaseClient
       .from("template_items")
-      .select("*") 
+      .select("*")
       .in("template_id", selectedTemplateIds);
 
     if (masterError) throw masterError;
 
     if (!masterItems || masterItems.length === 0) {
       alert("選ばれたテンプレートの中に持ち物データが見つかりませんでした。");
+      btnGenerate.disabled = false;
+      btnGenerate.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> この条件でリストを作成・上書き`;
       return;
     }
 
+    // 2. 同名・同カテゴリのアイテムを合算（重複排除）
     const mergedMap = new Map();
+
     masterItems.forEach(item => {
       const key = `${item.category}_${item.item_name}`;
+
+      // 泊数に応じた数量計算ルール: 初期数量 + (追加数量 × (泊数 - 1))
       const extraNights = nights - 1;
       const computedQuantity = item.quantity + (item.extra_quantity_per_night * (extraNights > 0 ? extraNights : 0));
 
@@ -145,6 +152,7 @@ async function generateListFromTemplates() {
         const existing = mergedMap.get(key);
         existing.quantity += computedQuantity;
       } else {
+        // 余計なIDなどを排除し、データベースの列名と100%一致する綺麗なオブジェクトを作る
         mergedMap.set(key, {
           category: item.category,
           item_name: item.item_name,
@@ -157,31 +165,42 @@ async function generateListFromTemplates() {
 
     const newRecordsToInsert = Array.from(mergedMap.values());
 
-    // テーブルの全削除
+    console.log("インサートを試みるデータ:", newRecordsToInsert);
+
+    // 3. 現在の trip_list_items テーブルの中身を一度すべて削除
     const { error: deleteError } = await supabaseClient
       .from("trip_list_items")
       .delete()
-      .neq("id", 0);
+      .neq("id", 0); // 全削除のハック
 
-    if (deleteError) throw deleteError;
+    if (deleteError) {
+      console.error("削除フェーズでエラー:", deleteError);
+      throw deleteError;
+    }
 
-    // 新データの一括インサート
+    // 4. 計算済みの合算データを一括でインサート
     const { error: insertError } = await supabaseClient
       .from("trip_list_items")
       .insert(newRecordsToInsert);
 
-    if (insertError) throw insertError;
+    if (insertError) {
+      console.error("インサートフェーズでエラー詳細:", insertError); // 💥 ここでエラーオブジェクトの正体をコンソールに暴きます
+      throw insertError;
+    }
 
+    // 最新リストを再取得して描画
     await fetchCurrentList();
 
   } catch (err) {
     console.error("生成プロセス全体でエラー発生:", err);
-    alert("エラーが発生しました: " + err.message);
+    // エラーがオブジェクトの場合は文字列化してアラートに出す
+    alert("エラーが発生しました: " + (err.message || JSON.stringify(err)));
   } finally {
     btnGenerate.disabled = false;
     btnGenerate.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> この条件でリストを作成・上書き`;
   }
 }
+
 
 // ==========================================
 // 6. チェックのON/OFF切り替え（Supabase送信）
