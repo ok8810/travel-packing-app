@@ -167,11 +167,12 @@ async function generateListFromTemplates() {
 
     console.log("インサートを試みるデータ:", newRecordsToInsert);
 
-   // 3. 現在の trip_list_items テーブルの中身を一度すべて削除
+    // 3. 現在の trip_list_items テーブルの中身を一度すべて削除
+    // UUID型テーブルで最も安全かつバグを起こさずに全削除を行う確実な指定です
     const { error: deleteError } = await supabaseClient
       .from("trip_list_items")
       .delete()
-      .not("id", "is", null); // ✨ 型を問わず、IDが存在する全レコードを安全に削除する指定
+      .gt("id", "00000000-0000-0000-0000-000000000000"); 
 
     if (deleteError) {
       console.error("削除フェーズでエラー:", deleteError);
