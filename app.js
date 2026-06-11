@@ -383,7 +383,7 @@ async function toggleItemCheck(id, currentStatus) {
 }
 
 // ==========================================
-// 7. 画面へのチェックリスト描画
+// 7. 画面へのチェックリスト描画（個別追加機能付き）
 // ==========================================
 function renderChecklist() {
   if (!listContainer) return;
@@ -397,6 +397,7 @@ function renderChecklist() {
     return;
   }
 
+  // カテゴリ（誰）ごとにグループ化
   const grouped = {};
   currentItems.forEach(item => {
     if (!grouped[item.category]) {
@@ -411,17 +412,42 @@ function renderChecklist() {
     const categoryCard = document.createElement("div");
     categoryCard.className = "bg-white rounded-2xl p-5 shadow-sm border border-slate-100 mb-4";
 
+    // --- カードヘッダー（追加ボタン付きに拡張） ---
     const header = document.createElement("h3");
     header.className = "text-md font-bold text-slate-800 mb-3 pb-1.5 border-b border-slate-100 flex justify-between items-center";
     
     const catItems = grouped[category];
     const checkedCount = catItems.filter(i => i.is_checked).length;
+    
     header.innerHTML = `
-      <span><i class="fa-solid fa-user text-indigo-400 mr-1.5 text-sm"></i>${category}</span>
-      <span class="text-xs bg-slate-100 text-slate-500 font-bold px-2 py-0.5 rounded-full">${checkedCount} / ${catItems.length}</span>
+      <div class="flex items-center gap-1.5">
+        <i class="fa-solid fa-user text-indigo-400 text-sm"></i>
+        <span>${category}</span>
+        <span class="text-[10px] bg-slate-100 text-slate-500 font-bold px-1.5 py-0.2 rounded-full ml-1">${checkedCount}/${catItems.length}</span>
+      </div>
+      <button class="btn-add-item text-xs text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1 bg-indigo-50 hover:bg-indigo-100/70 px-2 py-1 rounded-lg transition cursor-pointer" data-category="${category}">
+        <i class="fa-solid fa-plus text-[10px]"></i>追加
+      </button>
     `;
     categoryCard.appendChild(header);
 
+    // --- 【重要】入力フォームを表示するためのコンテナエリア ---
+    const formContainer = document.createElement("div");
+    formContainer.className = "hidden mb-3 p-3 bg-slate-50 border border-slate-100 rounded-xl space-y-2";
+    formContainer.innerHTML = `
+      <div class="flex gap-2">
+        <input type="text" placeholder="持ち物名" class="input-name flex-1 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500">
+        <input type="number" value="1" min="1" class="input-qty w-14 px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-center text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500">
+        <input type="text" value="個" class="input-unit w-12 px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-center text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500">
+      </div>
+      <div class="flex justify-end gap-1.5">
+        <button class="btn-cancel-add text-[11px] font-bold text-slate-400 hover:text-slate-600 px-2 py-1">キャンセル</button>
+        <button class="btn-submit-add bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold px-2.5 py-1 rounded-md shadow-sm transition">保存</button>
+      </div>
+    `;
+    categoryCard.appendChild(formContainer);
+
+    // --- 持ち物一覧リスト ---
     const itemsList = document.createElement("div");
     itemsList.className = "space-y-3";
 
@@ -446,9 +472,81 @@ function renderChecklist() {
 
       itemsList.appendChild(itemRow);
     });
-
     categoryCard.appendChild(itemsList);
+
+    // --- 追加ボタンとフォームの開閉イベントを仕込む ---
+    const btnAdd = categoryCard.querySelector(".btn-add-item");
+    const btnCancel = categoryCard.querySelector(".btn-cancel-add");
+    const btnSubmit = categoryCard.querySelector(".btn-submit-add");
+    
+    btnAdd.addEventListener("click", () => {
+      formContainer.classList.toggle("hidden");
+      if (!formContainer.classList.contains("hidden")) {
+        formContainer.querySelector(".input-name").focus();
+      }
+    });
+
+    btnCancel.addEventListener("click", () => {
+      formContainer.classList.add("hidden");
+    });
+
+    btnSubmit.addEventListener("click", () => {
+      addNewItemToTripList(category, formContainer);
+    });
+
     listContainer.appendChild(categoryCard);
+  }
+}
+
+// ==========================================
+// 【新規追加】個別の持ち物を新しく trip_list_items へインサートする処理
+// ==========================================
+async function addNewItemToTripList(category, formContainer) {
+  const nameInput = formContainer.querySelector(".input-name");
+  const qtyInput = formContainer.querySelector(".input-qty");
+  const unitInput = formContainer.querySelector(".input-unit");
+  const btnSubmit = formContainer.querySelector(".btn-submit-add");
+
+  const itemName = nameInput.value.trim();
+  const quantity = parseInt(qtyInput.value) || 1;
+  const unit = unitInput.value.trim() || "個";
+
+  if (!itemName) {
+    alert("持ち物名を入力してください！");
+    nameInput.focus();
+    return;
+  }
+
+  btnSubmit.disabled = true;
+  btnSubmit.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin"></i>`;
+
+  const newRecord = {
+    category: category,
+    item_name: itemName,
+    quantity: quantity,
+    unit: unit,
+    is_checked: false
+  };
+
+  // 💡 もし trip_list_items に sort_order 列が存在している場合は、一番最後に並ぶように大きな値を入れておきます
+  // (なければ自動で無視される、または一応オブジェクトに含めておいても大丈夫です)
+  newRecord.sort_order = 9999;
+
+  const { error } = await supabaseClient
+    .from("trip_list_items")
+    .insert([newRecord]);
+
+  if (error) {
+    console.error("個別アイテムの追加失敗:", error);
+    alert("追加に失敗しました。");
+    btnSubmit.disabled = false;
+    btnSubmit.innerHTML = "保存";
+  } else {
+    // 成功したらフォームをクリアして隠す (リアルタイム同期で画面は自動更新されます)
+    nameInput.value = "";
+    qtyInput.value = "1";
+    unitInput.value = "個";
+    formContainer.classList.add("hidden");
   }
 }
 
