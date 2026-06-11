@@ -257,6 +257,7 @@ async function fetchCurrentList() {
 // ==========================================
 // 5. マスターから計算して新規リストを生成（上書き）するロジック
 // ==========================================
+
 async function generateListFromTemplates() {
   const checkedBoxes = document.querySelectorAll('input[name="template-select"]:checked');
   if (checkedBoxes.length === 0) {
@@ -264,10 +265,8 @@ async function generateListFromTemplates() {
     return;
   }
   
-  // 選択されたテンプレートのIDと名前を取得
   const selectedTemplateIds = Array.from(checkedBoxes).map(box => box.value);
   const selectedTemplateNames = Array.from(checkedBoxes).map(box => {
-    // チェックボックスの親要素や隣のspanからテキストを拾う
     return box.nextElementSibling ? box.nextElementSibling.textContent.trim() : "不明なリスト";
   });
 
@@ -281,20 +280,22 @@ async function generateListFromTemplates() {
   btnGenerate.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin"></i> 生成中...`;
 
   try {
+    // ✨【修正】ここでも sort_order 順にマスターデータを取得します
     const { data: masterItems, error: masterError } = await supabaseClient
       .from("template_items")
       .select("*")
-      .in("template_id", selectedTemplateIds);
+      .in("template_id", selectedTemplateIds)
+      .order("sort_order", { ascending: true }); // 並び順を維持して取得
 
     if (masterError) throw masterError;
 
     if (!masterItems || masterItems.length === 0) {
       alert("選ばれたテンプレートの中に持ち物データが見つかりませんでした。");
       btnGenerate.disabled = false;
-      btnGenerate.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> この条件でリストを作成・上書き`;
       return;
     }
 
+    // Mapを使って合算する際、最初に登場した順番（sort_order）を記憶できるようにします
     const mergedMap = new Map();
     masterItems.forEach(item => {
       const key = `${item.category}_${item.item_name}`;
@@ -305,16 +306,19 @@ async function generateListFromTemplates() {
         const existing = mergedMap.get(key);
         existing.quantity += computedQuantity;
       } else {
+        // ✨ 新規追加時に、マスターが持っていた sort_order を一緒に保管します
         mergedMap.set(key, {
           category: item.category,
           item_name: item.item_name,
           quantity: computedQuantity,
           unit: item.unit || "個",
-          is_checked: false
+          is_checked: false,
+          sort_order: item.sort_order // 👈 ここで並び順を引き継ぐ
         });
       }
     });
 
+    // インサート用レコードの配列。JSのMapは挿入順が維持されるため、すでに綺麗に並んでいます。
     const newRecordsToInsert = Array.from(mergedMap.values());
 
     const { error: deleteError } = await supabaseClient
@@ -324,13 +328,16 @@ async function generateListFromTemplates() {
 
     if (deleteError) throw deleteError;
 
+    // ✨ 新しい trip_list_items に並び順情報付きで一括登録
+    // (※もし trip_list_items テーブルに sort_order 列がなくても、PostgreSQLはインサートされた順にデータを格納・返却する傾向がありますが、
+    //  Mapの配列順のまま一気にインサートされるため順番が維持されます)
     const { error: insertError } = await supabaseClient
       .from("trip_list_items")
       .insert(newRecordsToInsert);
 
     if (insertError) throw insertError;
 
-    // ✨【新規追加】生成条件を組み立てて進捗バーの下に表示させる
+    // 条件テキストの表示処理
     const conditionContainer = document.getElementById("generated-condition-text");
     if (conditionContainer) {
       const templateListText = selectedTemplateNames.join(" ＋ ");
@@ -347,10 +354,9 @@ async function generateListFromTemplates() {
           </div>
         </div>
       `;
-      conditionContainer.classList.remove("hidden"); // 非表示を解除して見せる
+      conditionContainer.classList.remove("hidden");
     }
 
-    // リストを再取得
     await fetchCurrentList();
 
   } catch (err) {
@@ -361,7 +367,6 @@ async function generateListFromTemplates() {
     btnGenerate.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> この条件でリストを作成・上書き`;
   }
 }
-
 
 // ==========================================
 // 6. チェックのON/OFF切り替え
