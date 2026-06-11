@@ -237,11 +237,13 @@ async function renderTemplateDetails(templateId) {
 // 4. 現在有効なチェックリスト (`trip_list_items`) を取得して描画
 // ==========================================
 async function fetchCurrentList() {
+  // ✨【修正】sort_order を優先して並び替えることで、個別追加（9999）が最後尾になります
   const { data: items, error } = await supabaseClient
     .from("trip_list_items")
     .select("*")
     .order("category", { ascending: true })
-    .order("id", { ascending: true });
+    .order("sort_order", { ascending: true }) // 👈 並び順（sort_order）を最優先にする
+    .order("id", { ascending: true });         // 同順位（個別追加同士）なら追加した順
 
   if (error) {
     console.error("リスト取得エラー:", error);
