@@ -512,8 +512,8 @@ function renderChecklist() {
     return;
   }
 
-  // 🟢【ここを修正】大画面（md: 768px以上）の時はチェックリストも2列にする
-  listContainer.className = "space-y-6 md:grid md:grid-cols-2 md:gap-4 md:space-y-0";
+// 🟢【修正版】スマホは1列、タブレットは2列、普通のPCは3列、大画面PCなら4列に可変するグリッド
+  listContainer.className = "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 space-y-0";
   
   // カテゴリ（誰）ごとにグループ化
   const grouped = {};
