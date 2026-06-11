@@ -206,8 +206,8 @@ async function renderTemplateDetails(templateId) {
 // ==========================================
 function renderTemplateEditForm() {
   if (!viewTemplateContent) return;
-  // 🟢【ここを修正】大画面（md: 768px以上）の時はグリッドで2列にするクラスを追加
-  viewTemplateContent.className = "space-y-4 md:grid md:grid-cols-2 md:gap-4 md:space-y-0";
+// 🟢【修正版】スマホは1列、タブレットは2列、普通のPCは3列、大画面PCなら4列に可変するグリッド
+  viewTemplateContent.className = "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 space-y-0";
   viewTemplateContent.innerHTML = "";
 
   if (editingTemplateItems.length === 0) {
