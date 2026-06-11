@@ -172,7 +172,7 @@ async function loadTemplates() {
 }
 
 // ==========================================
-// 【新規】選択したマスターテンプレートの中身を取得して描画
+// テンプレートデータを取得して編集用配列へ格納
 // ==========================================
 async function renderTemplateDetails(templateId) {
   if (!viewTemplateContent || !templateId) return;
@@ -183,12 +183,11 @@ async function renderTemplateDetails(templateId) {
       <p class="text-xs">マスターデータを読み込み中...</p>
     </div>`;
 
-  // 選択されたテンプレートに紐づくアイテムをすべて取得
   const { data: items, error } = await supabaseClient
     .from("template_items")
     .select("*")
     .eq("template_id", templateId)
-    .order("category", { ascending: true })
+    .order("sort_order", { ascending: true })
     .order("id", { ascending: true });
 
   if (error) {
@@ -197,73 +196,150 @@ async function renderTemplateDetails(templateId) {
     return;
   }
 
-  if (!items || items.length === 0) {
-    viewTemplateContent.innerHTML = `
-      <div class="bg-white rounded-2xl p-6 text-center border border-slate-100 text-slate-400 shadow-sm">
-        <p class="text-sm">このテンプレートには持ち物アイテムが登録されていません。</p>
-      </div>`;
+  // 編集用の一時配列にデータをコピー
+  editingTemplateItems = items || [];
+  renderTemplateEditForm();
+}
+
+// ==========================================
+// 編集用配列を元に、画面にフォームをレンダリングする（並び替え・追加・削除対応）
+// ==========================================
+function renderTemplateEditForm() {
+  if (!viewTemplateContent) return;
+  viewTemplateContent.innerHTML = "";
+
+  if (editingTemplateItems.length === 0) {
+    viewTemplateContent.innerHTML = `<div class="text-slate-400 text-xs text-center py-6">項目がありません。右上のボタンからカテゴリを追加してください。</div>`;
     return;
   }
 
-  // カテゴリ（誰）ごとにグループ化
+  // カテゴリごとにグループ化
   const grouped = {};
-  items.forEach(item => {
+  editingTemplateItems.forEach((item, index) => {
+    // 配列内の本来のインデックスを保持させておく
+    item.originalIndex = index;
     if (!grouped[item.category]) {
       grouped[item.category] = [];
     }
     grouped[item.category].push(item);
   });
 
-  viewTemplateContent.innerHTML = "";
-
-  // カテゴリごとにカード形式でテーブルを描画
   for (const category in grouped) {
     const card = document.createElement("div");
-    card.className = "bg-white rounded-2xl p-5 shadow-sm border border-slate-100 mb-4";
-    
-    // カードヘッダー（家族の誰か）
-    const header = document.createElement("h4");
-    header.className = "text-sm font-bold text-slate-800 mb-3 pb-2 border-b border-slate-100 flex items-center justify-between";
+    card.className = "bg-white rounded-2xl p-4 shadow-sm border border-slate-100 mb-4";
+
+    // ヘッダー（カテゴリ名 ＆ そのカテゴリへの行追加ボタン）
+    const header = document.createElement("div");
+    header.className = "flex justify-between items-center mb-3 pb-2 border-b border-slate-100";
     header.innerHTML = `
-      <span><i class="fa-solid fa-user text-indigo-400 mr-2"></i>${category}</span>
-      <span class="text-xs text-slate-400 font-normal">登録数: ${grouped[category].length}件</span>
+      <h4 class="text-sm font-bold text-slate-800"><i class="fa-solid fa-user text-indigo-400 mr-1.5"></i>${category}</h4>
+      <button class="btn-master-add text-[11px] bg-indigo-50 hover:bg-indigo-100 text-indigo-600 font-bold px-2 py-1 rounded-md transition" data-category="${category}">
+        <i class="fa-solid fa-plus mr-1"></i>持物追加
+      </button>
     `;
     card.appendChild(header);
 
-    // 持ち物一覧テーブルの構築
-    const tableWrapper = document.createElement("div");
-    tableWrapper.className = "overflow-x-auto";
-    
-    let tableHtml = `
-      <table class="w-full text-left text-xs text-slate-600">
-        <thead>
-          <tr class="text-slate-400 font-semibold border-b border-slate-50">
-            <th class="py-2">持ち物</th>
-            <th class="py-2 text-center w-16">初期数量</th>
-            <th class="py-2 text-center w-24">1泊増えたら</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-slate-50">
-    `;
+    // 各持ち物行のフォーム生成
+    const listWrapper = document.createElement("div");
+    listWrapper.className = "space-y-2";
 
-    grouped[category].forEach(item => {
-      // 1泊増えたらの数値が0なら「-」にするなど見やすく配置
-      const extraText = item.extra_quantity_per_night > 0 ? `+${item.extra_quantity_per_night} ${item.unit}` : `<span class="text-slate-300">-</span>`;
-      tableHtml += `
-        <tr class="hover:bg-slate-50/50">
-          <td class="py-2 font-medium text-slate-700">${item.item_name}</td>
-          <td class="py-2 text-center text-slate-600 font-bold">${item.quantity} ${item.unit}</td>
-          <td class="py-2 text-center font-semibold text-indigo-500">${extraText}</td>
-        </tr>
+    grouped[category].forEach((item, idx) => {
+      const row = document.createElement("div");
+      row.className = "flex items-center gap-1.5 p-1.5 hover:bg-slate-50 rounded-lg transition text-xs";
+
+      // 🔼 🔽 並び替えボタンの活性・非活性制御
+      const isFirst = idx === 0;
+      const isLast = idx === grouped[category].length - 1;
+
+      row.innerHTML = `
+        <div class="flex flex-col gap-0.5">
+          <button class="btn-move-up text-slate-400 hover:text-indigo-600 disabled:opacity-20" ${isFirst ? 'disabled' : ''} data-index="${item.originalIndex}"><i class="fa-solid fa-caret-up text-sm"></i></button>
+          <button class="btn-move-down text-slate-400 hover:text-indigo-600 disabled:opacity-20" ${isLast ? 'disabled' : ''} data-index="${item.originalIndex}"><i class="fa-solid fa-caret-down text-sm"></i></button>
+        </div>
+        
+        <input type="text" value="${item.item_name || ''}" placeholder="持ち物名" class="change-name flex-1 min-w-0 px-2 py-1.5 border border-slate-200 rounded-lg font-medium text-slate-700" data-index="${item.originalIndex}">
+        
+        <input type="number" value="${item.quantity}" min="0" class="change-qty w-11 px-1 py-1.5 border border-slate-200 rounded-lg font-bold text-center text-slate-700" data-index="${item.originalIndex}">
+        
+        <input type="text" value="${item.unit || '個'}" placeholder="単位" class="change-unit w-10 px-1 py-1.5 border border-slate-200 rounded-lg text-center text-slate-600" data-index="${item.originalIndex}">
+        
+        <div class="flex items-center gap-0.5 bg-indigo-50/50 rounded-lg px-1 py-0.5 border border-indigo-100/30">
+          <span class="text-[10px] text-indigo-400 font-bold">+</span>
+          <input type="number" value="${item.extra_quantity_per_night || 0}" min="0" class="change-extra w-9 bg-transparent font-semibold text-center text-indigo-600 focus:outline-none" data-index="${item.originalIndex}">
+        </div>
+
+        <button class="btn-master-del text-slate-300 hover:text-red-500 p-1 transition" data-index="${item.originalIndex}">
+          <i class="fa-solid fa-trash-can"></i>
+        </button>
       `;
+      listWrapper.appendChild(row);
     });
-
-    tableHtml += `</tbody></table>`;
-    tableWrapper.innerHTML = tableHtml;
-    card.appendChild(tableWrapper);
-    
+    card.appendChild(listWrapper);
     viewTemplateContent.appendChild(card);
   }
+
+  // --- 各種入力変更・ボタン操作のイベントバインド ---
+  setupFormEventListeners();
+}
+
+// フォーム内の文字変更や各ボタンの挙動を一時配列にリアルタイム連動させる
+function setupFormEventListeners() {
+  // 1. 文字や数値の入力を配列に同期
+  viewTemplateContent.querySelectorAll(".change-name").forEach(el => el.addEventListener("input", (e) => { editingTemplateItems[e.target.dataset.index].item_name = e.target.value; }));
+  viewTemplateContent.querySelectorAll(".change-qty").forEach(el => el.addEventListener("input", (e) => { editingTemplateItems[e.target.dataset.index].quantity = parseInt(e.target.value) || 0; }));
+  viewTemplateContent.querySelectorAll(".change-unit").forEach(el => el.addEventListener("input", (e) => { editingTemplateItems[e.target.dataset.index].unit = e.target.value; }));
+  viewTemplateContent.querySelectorAll(".change-extra").forEach(el => el.addEventListener("input", (e) => { editingTemplateItems[e.target.dataset.index].extra_quantity_per_night = parseInt(e.target.value) || 0; }));
+
+  // 2. 🔼 上に移動
+  viewTemplateContent.querySelectorAll(".btn-move-up").forEach(btn => btn.addEventListener("click", (e) => {
+    const idx = parseInt(e.currentTarget.dataset.index);
+    swapItems(idx, idx - 1);
+  }));
+
+  // 3. 🔽 下に移動
+  viewTemplateContent.querySelectorAll(".btn-move-down").forEach(btn => btn.addEventListener("click", (e) => {
+    const idx = parseInt(e.currentTarget.dataset.index);
+    swapItems(idx, idx + 1);
+  }));
+
+  // 4. ❌ 行削除
+  viewTemplateContent.querySelectorAll(".btn-master-del").forEach(btn => btn.addEventListener("click", (e) => {
+    const idx = parseInt(e.currentTarget.dataset.index);
+    editingTemplateItems.splice(idx, 1); // 配列から除去
+    renderTemplateEditForm(); // 再描画
+  }));
+
+  // 5. ➕ 持ち物の行追加
+  viewTemplateContent.querySelectorAll(".btn-master-add").forEach(btn => btn.addEventListener("click", (e) => {
+    const cat = e.currentTarget.dataset.category;
+    // 現在のカテゴリの最後のアイテムの位置を探して、そこに滑り込ませる
+    let insertIndex = editingTemplateItems.length;
+    for (let i = editingTemplateItems.length - 1; i >= 0; i--) {
+      if (editingTemplateItems[i].category === cat) {
+        insertIndex = i + 1;
+        break;
+      }
+    }
+    editingTemplateItems.splice(insertIndex, 0, {
+      id: 'new_' + Date.now() + Math.random().toString(36).substr(2, 5), // バニラなテンポラリID
+      template_id: viewTemplateSelect.value,
+      category: cat,
+      item_name: '',
+      quantity: 1,
+      unit: '個',
+      extra_quantity_per_night: 0,
+      sort_order: insertIndex + 1
+    });
+    renderTemplateEditForm();
+  }));
+}
+
+// 配列の要素を入れ替える（並び替え）
+function swapItems(idx1, idx2) {
+  const temp = editingTemplateItems[idx1];
+  editingTemplateItems[idx1] = editingTemplateItems[idx2];
+  editingTemplateItems[idx2] = temp;
+  renderTemplateEditForm();
 }
 
 // ==========================================
@@ -614,4 +690,76 @@ function setupRealtimeSubscription() {
       fetchCurrentList();
     })
     .subscribe();
+}
+
+// ==========================================
+// 【新規追加】編集したマスターデータをSupabaseへ一括保存
+// ==========================================
+async function saveTemplateMaster() {
+  const templateId = viewTemplateSelect.value;
+  if (!templateId) return;
+
+  // バリデーション：持ち物名が空っぽの行がないかチェック
+  const hasEmptyName = editingTemplateItems.some(item => !item.item_name.trim());
+  if (hasEmptyName) {
+    alert("持ち物名が空欄の項目があります。入力するか削除してください。");
+    return;
+  }
+
+  btnSaveTemplate.disabled = true;
+  btnSaveTemplate.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin"></i> マスターデータを保存中...`;
+
+  try {
+    // 1. 現在の並び順（配列のインデックス順）をそのまま sort_order にセットし直す
+    //    同時に、新しく追加した一時的なID（new_xxx）は、データベース側で自動生成（UUID）させるために id 列を除外する
+    const recordsToUpsert = editingTemplateItems.map((item, index) => {
+      const record = {
+        template_id: item.template_id,
+        category: item.category,
+        item_name: item.item_name.trim(),
+        quantity: item.quantity,
+        unit: item.unit,
+        extra_quantity_per_night: item.extra_quantity_per_night,
+        sort_order: index + 1 // ✨ ここで完璧な連番が再割り当てされます
+      };
+      // 既存データ（UUIDを保持しているもの）であればIDを指定して上書きさせる
+      if (item.id && !item.id.toString().startsWith('new_')) {
+        record.id = item.id;
+      }
+      return record;
+    });
+
+    // 2. データベース側の「今ある項目」を一旦リセットして、新しい並び順・項目で登録し直す
+    // (※upsertだと画面から「削除した項目」がDBに残ってしまうため、一度該当template_idのアイテムを全消去してinsertするのが最も確実です)
+    const { error: deleteError } = await supabaseClient
+      .from("template_items")
+      .delete()
+      .eq("template_id", templateId);
+
+    if (deleteError) throw deleteError;
+
+    // 3. 新しい配列を一括インサート
+    if (recordsToUpsert.length > 0) {
+      const { error: insertError } = await supabaseClient
+        .from("template_items")
+        .insert(recordsToUpsert);
+
+      if (insertError) throw insertError;
+    }
+
+    alert("🎉 テンプレートの変更（項目・数量・単位・順序）をすべて正常に保存しました！");
+    
+    // マスターが書き換わったので、現在の選択データを再読込
+    await renderTemplateDetails(templateId);
+    
+    // 表側のチェックボックス一覧用マスターも更新
+    await loadTemplates();
+
+  } catch (err) {
+    console.error("マスター保存エラー:", err);
+    alert("保存に失敗しました: " + (err.message || JSON.stringify(err)));
+  } finally {
+    btnSaveTemplate.disabled = false;
+    btnSaveTemplate.innerHTML = `<i class="fa-solid fa-floppy-disk"></i> テンプレートの変更をすべて保存`;
+  }
 }
