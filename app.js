@@ -34,6 +34,9 @@ let allTemplates = []; // 読み込んだテンプレート一覧を保持
 document.addEventListener("DOMContentLoaded", async () => {
   console.log("持ち物アプリ: 確認機能付きロジック起動");
 
+  const btnSaveTemplate = document.getElementById("btn-save-template");
+  const btnAddCategory = document.getElementById("btn-add-category");
+
   // 1. 泊数入力の連動変更
   if (stayNightsInput) {
     stayNightsInput.addEventListener("input", () => {
@@ -47,6 +50,36 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // 3. マスターテンプレート一覧の取得（作成用と確認用の両方に分配）
   await loadTemplates();
+
+  if (btnSaveTemplate) {
+    btnSaveTemplate.addEventListener("click", saveTemplateMaster);
+  }
+
+  // 変更一括保存ボタンのイベント
+  if (btnSaveTemplate) {
+    btnSaveTemplate.addEventListener("click", saveTemplateMaster);
+  }
+  
+  // カテゴリ追加ボタンのイベント
+  if (btnAddCategory) {
+    btnAddCategory.addEventListener("click", () => {
+      const cat = prompt("追加したい家族のカテゴリ名（例: 共通, 子供部屋 など）を入力してください:");
+      if (cat) {
+        // 空のアイテムを1つ作って末尾に追加
+        editingTemplateItems.push({
+          id: 'new_' + Date.now(),
+          template_id: viewTemplateSelect.value,
+          category: cat.trim(),
+          item_name: '',
+          quantity: 1,
+          unit: '個',
+          extra_quantity_per_night: 0,
+          sort_order: editingTemplateItems.length + 1
+        });
+        renderTemplateEditForm();
+      }
+    });
+  }
 
   // 4. 確認用ドロップダウンが変更された時のイベント
   if (viewTemplateSelect) {
