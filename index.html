@@ -14,7 +14,7 @@
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen pb-12">
 
-  <div class="max-w-md md:max-w-4xl mx-auto px-4 pt-6">
+  <div class="max-w-md md:max-w-4xl xl:max-w-7xl mx-auto px-4 pt-6">
     <div class="flex border-b border-slate-200 mb-6 bg-slate-50 p-1.5 rounded-xl">
       <button id="tab-create" class="flex-1 py-2 px-4 rounded-lg font-bold text-sm bg-white text-indigo-600 shadow-sm transition">
         <i class="fa-solid fa-wand-magic-sparkles mr-1.5"></i>リストを作成
@@ -69,8 +69,8 @@
         </button>
       </div>
 
-      <div id="list-container" class="space-y-6">
-        <div class="text-center py-8 text-slate-400">
+      <div id="list-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        <div class="col-span-full text-center py-8 text-slate-400">
           <i class="fa-solid fa-circle-notch animate-spin text-2xl text-indigo-400 mb-2"></i>
           <p class="text-sm">データを読み込み中...</p>
         </div>
