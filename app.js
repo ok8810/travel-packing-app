@@ -348,13 +348,13 @@ function swapItems(idx1, idx2) {
 // 4. 現在有効なチェックリスト (`trip_list_items`) を取得して描画
 // ==========================================
 async function fetchCurrentList() {
-  // ✨【修正】sort_order を優先して並び替えることで、個別追加（9999）が最後尾になります
+// 🟢【修正版】1. カテゴリ（パパ、ママなど）を最優先 ➔ 2. テンプレート順・sort_order順
   const { data: items, error } = await supabaseClient
     .from("trip_list_items")
     .select("*")
-    .order("category", { ascending: true })
-    .order("sort_order", { ascending: true }) // 👈 並び順（sort_order）を最優先にする
-    .order("id", { ascending: true });         // 同順位（個別追加同士）なら追加した順
+    .order("category", { ascending: true })   // 1. まずは家族（カテゴリ）ごとに分ける
+    .order("sort_order", { ascending: true }) // 2. その中でテンプレート順 ➔ 元の登録順に並べる
+    .order("id", { ascending: true });
 
   if (error) {
     console.error("リスト取得エラー:", error);
@@ -415,18 +415,26 @@ async function generateListFromTemplates() {
       const extraNights = nights - 1;
       const computedQuantity = item.quantity + (item.extra_quantity_per_night * (extraNights > 0 ? extraNights : 0));
 
+      // 🟢【修正版】テンプレートの選択順（インデックス）を取得
+      const templateOrderIndex = selectedTemplateIds.indexOf(item.template_id);
+      // テンプレートごとに10000の重みをつけ、その中で本来のsort_orderを足すことで、テンプレート順➔sort_order順を1つの数値で表現
+      const combinedSortOrder = ((templateOrderIndex + 1) * 10000) + (item.sort_order || 0);
+
       if (mergedMap.has(key)) {
         const existing = mergedMap.get(key);
         existing.quantity += computedQuantity;
+        // 先に選んだテンプレートの順序（より小さい数値）を優先する
+        if (combinedSortOrder < existing.sort_order) {
+          existing.sort_order = combinedSortOrder;
+        }
       } else {
-        // ✨ 新規追加時に、マスターが持っていた sort_order を一緒に保管します
         mergedMap.set(key, {
           category: item.category,
           item_name: item.item_name,
           quantity: computedQuantity,
           unit: item.unit || "個",
           is_checked: false,
-          sort_order: item.sort_order // 👈 ここで並び順を引き継ぐ
+          sort_order: combinedSortOrder // 👈 計算した複合ソート順をセット
         });
       }
     });
