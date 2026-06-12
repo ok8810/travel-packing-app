@@ -348,12 +348,14 @@ function swapItems(idx1, idx2) {
 // 4. 現在有効なチェックリスト (`trip_list_items`) を取得して描画
 // ==========================================
 async function fetchCurrentList() {
-// 🟢【修正版】1. カテゴリ（パパ、ママなど）を最優先 ➔ 2. テンプレート順・sort_order順
+  // 🟢 1. 理想のカテゴリの並び順をここに定義します（左から順に優先されます）
+  const categoryOrder = ["琴晴", "穂香", "遥菜", "ママ", "パパ", "共通"];
+
+  // Supabaseからはソート順（sort_order）をベースにデータを取得
   const { data: items, error } = await supabaseClient
     .from("trip_list_items")
     .select("*")
-    .order("category", { ascending: true })   // 1. まずは家族（カテゴリ）ごとに分ける
-    .order("sort_order", { ascending: true }) // 2. その中でテンプレート順 ➔ 元の登録順に並べる
+    .order("sort_order", { ascending: true })
     .order("id", { ascending: true });
 
   if (error) {
@@ -361,7 +363,24 @@ async function fetchCurrentList() {
     return;
   }
 
-  currentItems = items || [];
+  let fetchedItems = items || [];
+
+  // 🟢 2. JavaScript側で categoryOrder の順番通りにカスタムソートを実行
+  fetchedItems.sort((a, b) => {
+    let indexA = categoryOrder.indexOf(a.category);
+    let indexB = categoryOrder.indexOf(b.category);
+
+    // もし定義していないカテゴリ（例:新しく追加した人など）があれば後ろに回す
+    if (indexA === -1) indexA = 999;
+    if (indexB === -1) indexB = 999;
+
+    if (indexA !== indexB) {
+      return indexA - indexB; // 1. カテゴリの並び順を最優先
+    }
+    return 0; // 2. 同じカテゴリ内なら、Supabaseから取得した sort_order 順を維持
+  });
+
+  currentItems = fetchedItems;
   renderChecklist();
   updateProgress();
 }
