@@ -510,13 +510,16 @@ function renderChecklist() {
   if (!listContainer) return;
 
   if (currentItems.length === 0) {
-// 💡 リストが空のときはグリッドを解除して中央寄せにするためクラスをリセット
     listContainer.className = "space-y-6";
     listContainer.innerHTML = `
       <div class="bg-white rounded-2xl p-8 text-center border border-slate-100 text-slate-400 shadow-sm">
         <i class="fa-solid fa-clipboard-list text-3xl mb-2 text-slate-300"></i>
         <p class="text-sm">上のパネルから条件を選んで<br>「リストを作成」ボタンを押してください！</p>
       </div>`;
+    
+    // 🟢【追加】リストが完全に空のときだけ条件テキストを隠すようにする（初期状態用）
+    const conditionContainer = document.getElementById("generated-condition-text");
+    if (conditionContainer) conditionContainer.classList.add("hidden");
     return;
   }
 
