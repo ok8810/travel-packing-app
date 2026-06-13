@@ -730,13 +730,13 @@ function setupRealtimeSubscription() {
 }
 
 // ==========================================
-// 【新規追加】編集したマスターデータをSupabaseへ一括保存
+// 【修正版】編集したマスターデータをSupabaseへ一括保存
 // ==========================================
 async function saveTemplateMaster() {
   const templateId = viewTemplateSelect.value;
   if (!templateId) return;
 
-// 🟢【修正版】空欄の行があれば、エラーにするのではなく、自動的に除外して保存に進むようにする
+  // 🟢 空欄の行があれば、エラーにするのではなく、自動的に除外して保存に進む
   const validItems = editingTemplateItems.filter(item => item.item_name && item.item_name.trim());
   
   if (validItems.length === 0) {
@@ -748,7 +748,6 @@ async function saveTemplateMaster() {
   btnSaveTemplate.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin"></i> マスターデータを保存中...`;
 
   try {
-    // 🟢 下の処理で使う配列を、空欄を除外した「validItems」に差し替える
     const recordsToUpsert = validItems.map((item, index) => {
       const record = {
         template_id: item.template_id,
@@ -757,7 +756,7 @@ async function saveTemplateMaster() {
         quantity: item.quantity,
         unit: item.unit,
         extra_quantity_per_night: item.extra_quantity_per_night,
-        sort_order: index + 1
+        sort_order: index + 1 // 連番を再割り当て
       };
       if (item.id && !item.id.toString().startsWith('new_')) {
         record.id = item.id;
@@ -765,31 +764,7 @@ async function saveTemplateMaster() {
       return record;
     });
 
-  btnSaveTemplate.disabled = true;
-  btnSaveTemplate.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin"></i> マスターデータを保存中...`;
-
-  try {
-    // 1. 現在の並び順（配列のインデックス順）をそのまま sort_order にセットし直す
-    //    同時に、新しく追加した一時的なID（new_xxx）は、データベース側で自動生成（UUID）させるために id 列を除外する
-    const recordsToUpsert = editingTemplateItems.map((item, index) => {
-      const record = {
-        template_id: item.template_id,
-        category: item.category,
-        item_name: item.item_name.trim(),
-        quantity: item.quantity,
-        unit: item.unit,
-        extra_quantity_per_night: item.extra_quantity_per_night,
-        sort_order: index + 1 // ✨ ここで完璧な連番が再割り当てされます
-      };
-      // 既存データ（UUIDを保持しているもの）であればIDを指定して上書きさせる
-      if (item.id && !item.id.toString().startsWith('new_')) {
-        record.id = item.id;
-      }
-      return record;
-    });
-
-    // 2. データベース側の「今ある項目」を一旦リセットして、新しい並び順・項目で登録し直す
-    // (※upsertだと画面から「削除した項目」がDBに残ってしまうため、一度該当template_idのアイテムを全消去してinsertするのが最も確実です)
+    // 既存の項目を一旦削除
     const { error: deleteError } = await supabaseClient
       .from("template_items")
       .delete()
@@ -797,7 +772,7 @@ async function saveTemplateMaster() {
 
     if (deleteError) throw deleteError;
 
-    // 3. 新しい配列を一括インサート
+    // 新しい配列を一括インサート
     if (recordsToUpsert.length > 0) {
       const { error: insertError } = await supabaseClient
         .from("template_items")
@@ -815,9 +790,11 @@ async function saveTemplateMaster() {
     await loadTemplates();
 
   } catch (err) {
+    // 🟢 書き漏らしていた catch ブロック
     console.error("マスター保存エラー:", err);
     alert("保存に失敗しました: " + (err.message || JSON.stringify(err)));
   } finally {
+    // 🟢 一緒に消えてしまっていた finally ブロック
     btnSaveTemplate.disabled = false;
     btnSaveTemplate.innerHTML = `<i class="fa-solid fa-floppy-disk"></i> テンプレートの変更をすべて保存`;
   }
