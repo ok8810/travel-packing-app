@@ -215,11 +215,11 @@ function renderTemplateEditForm() {
     return;
   }
 
-  // カテゴリごとにグループ化
+// カテゴリごとにグループ化
   const grouped = {};
   editingTemplateItems.forEach((item, index) => {
-    // 配列内の本来のインデックスを保持させておく
-    item.originalIndex = index;
+    // 🟢 常に「現在の配列の最新のインデックス」を確実に保持させる
+    item.originalIndex = index; 
     if (!grouped[item.category]) {
       grouped[item.category] = [];
     }
@@ -736,12 +736,34 @@ async function saveTemplateMaster() {
   const templateId = viewTemplateSelect.value;
   if (!templateId) return;
 
-  // バリデーション：持ち物名が空っぽの行がないかチェック
-  const hasEmptyName = editingTemplateItems.some(item => !item.item_name.trim());
-  if (hasEmptyName) {
-    alert("持ち物名が空欄の項目があります。入力するか削除してください。");
+// 🟢【修正版】空欄の行があれば、エラーにするのではなく、自動的に除外して保存に進むようにする
+  const validItems = editingTemplateItems.filter(item => item.item_name && item.item_name.trim());
+  
+  if (validItems.length === 0) {
+    alert("保存する持ち物項目がありません。");
     return;
   }
+
+  btnSaveTemplate.disabled = true;
+  btnSaveTemplate.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin"></i> マスターデータを保存中...`;
+
+  try {
+    // 🟢 下の処理で使う配列を、空欄を除外した「validItems」に差し替える
+    const recordsToUpsert = validItems.map((item, index) => {
+      const record = {
+        template_id: item.template_id,
+        category: item.category,
+        item_name: item.item_name.trim(),
+        quantity: item.quantity,
+        unit: item.unit,
+        extra_quantity_per_night: item.extra_quantity_per_night,
+        sort_order: index + 1
+      };
+      if (item.id && !item.id.toString().startsWith('new_')) {
+        record.id = item.id;
+      }
+      return record;
+    });
 
   btnSaveTemplate.disabled = true;
   btnSaveTemplate.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin"></i> マスターデータを保存中...`;
