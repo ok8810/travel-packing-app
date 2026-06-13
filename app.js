@@ -286,12 +286,31 @@ function renderTemplateEditForm() {
 
 // フォーム内の文字変更や各ボタンの挙動を一時配列にリアルタイム連動させる
 function setupFormEventListeners() {
-  // 1. 文字や数値の入力を配列に同期
-  viewTemplateContent.querySelectorAll(".change-name").forEach(el => el.addEventListener("input", (e) => { editingTemplateItems[e.target.dataset.index].item_name = e.target.value; }));
-  viewTemplateContent.querySelectorAll(".change-qty").forEach(el => el.addEventListener("input", (e) => { editingTemplateItems[e.target.dataset.index].quantity = parseInt(e.target.value) || 0; }));
-  viewTemplateContent.querySelectorAll(".change-unit").forEach(el => el.addEventListener("input", (e) => { editingTemplateItems[e.target.dataset.index].unit = e.target.value; }));
-  viewTemplateContent.querySelectorAll(".change-extra").forEach(el => el.addEventListener("input", (e) => { editingTemplateItems[e.target.dataset.index].extra_quantity_per_night = parseInt(e.target.value) || 0; }));
-
+ // 🟢【修正版】イベント発生源（currentTargetやtarget）の dataset.index から確実に配列と同期させる
+  viewTemplateContent.querySelectorAll(".change-name").forEach(el => el.addEventListener("input", (e) => {
+    const idx = e.currentTarget.dataset.index;
+    if (idx !== undefined && editingTemplateItems[idx]) {
+      editingTemplateItems[idx].item_name = e.currentTarget.value;
+    }
+  }));
+  viewTemplateContent.querySelectorAll(".change-qty").forEach(el => el.addEventListener("input", (e) => {
+    const idx = e.currentTarget.dataset.index;
+    if (idx !== undefined && editingTemplateItems[idx]) {
+      editingTemplateItems[idx].quantity = parseInt(e.currentTarget.value) || 0;
+    }
+  }));
+  viewTemplateContent.querySelectorAll(".change-unit").forEach(el => el.addEventListener("input", (e) => {
+    const idx = e.currentTarget.dataset.index;
+    if (idx !== undefined && editingTemplateItems[idx]) {
+      editingTemplateItems[idx].unit = e.currentTarget.value;
+    }
+  }));
+  viewTemplateContent.querySelectorAll(".change-extra").forEach(el => el.addEventListener("input", (e) => {
+    const idx = e.currentTarget.dataset.index;
+    if (idx !== undefined && editingTemplateItems[idx]) {
+      editingTemplateItems[idx].extra_quantity_per_night = parseInt(e.currentTarget.value) || 0;
+    }
+  }));
   // 2. 🔼 上に移動
   viewTemplateContent.querySelectorAll(".btn-move-up").forEach(btn => btn.addEventListener("click", (e) => {
     const idx = parseInt(e.currentTarget.dataset.index);
