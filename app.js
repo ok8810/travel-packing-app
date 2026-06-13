@@ -50,11 +50,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // 3. マスターテンプレート一覧の取得（作成用と確認用の両方に分配）
   await loadTemplates();
-
-  if (btnSaveTemplate) {
-    btnSaveTemplate.addEventListener("click", saveTemplateMaster);
-  }
-
+  
   // 変更一括保存ボタンのイベント
   if (btnSaveTemplate) {
     btnSaveTemplate.addEventListener("click", saveTemplateMaster);
@@ -752,8 +748,14 @@ function setupRealtimeSubscription() {
 // 【修正版】編集したマスターデータをSupabaseへ一括保存
 // ==========================================
 async function saveTemplateMaster() {
-  const templateId = viewTemplateSelect.value;
-  if (!templateId) return;
+  // 🟢 その場で確実にセレクトボックスの要素を捕まえ、選択されている値を取得する
+  const selectEl = document.getElementById("view-template-select");
+  const templateId = selectEl ? selectEl.value : null;
+  
+  if (!templateId) {
+    alert("編集対象のテンプレートが正しく選択されていません。");
+    return;
+  }
 
   // 🟢 空欄の行があれば、エラーにするのではなく、自動的に除外して保存に進む
   const validItems = editingTemplateItems.filter(item => item.item_name && item.item_name.trim());
