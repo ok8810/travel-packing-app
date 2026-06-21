@@ -785,8 +785,7 @@ async function saveTemplateMaster() {
         sort_order: index + 1
       };
     });
-    return record;
-  }
+
     // 🟢【重要】一度削除するのをやめ、upsert（上書き保存）を実行する
     // これにより、万が一失敗しても元のデータが消えることは絶対にありません
     const { error: upsertError } = await supabaseClient
