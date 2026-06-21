@@ -319,12 +319,19 @@ function setupFormEventListeners() {
     swapItems(idx, idx + 1);
   }));
 
-  // 4. ❌ 行削除
-  viewTemplateContent.querySelectorAll(".btn-master-del").forEach(btn => btn.addEventListener("click", (e) => {
-    const idx = parseInt(e.currentTarget.dataset.index);
-    editingTemplateItems.splice(idx, 1); // 配列から除去
-    renderTemplateEditForm(); // 再描画
-  }));
+// ⭕ 【修正版】行削除のイベント（ここを差し替えてください）
+viewTemplateContent.querySelectorAll(".btn-master-del").forEach(btn => btn.addEventListener("click", (e) => {
+  // クリックされたのが中の <i> アイコンでも、確実にボタン側の data-index を取得する
+  const button = e.target.closest(".btn-master-del");
+  if (!button) return;
+  
+  const idx = parseInt(button.dataset.index);
+  
+  if (!isNaN(idx) && editingTemplateItems[idx] !== undefined) {
+    editingTemplateItems.splice(idx, 1); // 配列から確実に除去
+    renderTemplateEditForm(); // 再描画してインデックスを再割り当て
+  }
+}));
 
   // 5. ➕ 持ち物の行追加
   viewTemplateContent.querySelectorAll(".btn-master-add").forEach(btn => btn.addEventListener("click", (e) => {
