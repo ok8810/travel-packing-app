@@ -745,86 +745,6 @@ function setupRealtimeSubscription() {
 }
 
 // ==========================================
-// 【修正版】編集したマスターデータをSupabaseへ一括保存
-// ==========================================
-async function saveTemplateMaster() {
-  // 🟢 その場で確実にセレクトボックスの要素を捕まえ、選択されている値を取得する
-  const selectEl = document.getElementById("view-template-select");
-  const templateId = selectEl ? selectEl.value : null;
-  
-  if (!templateId) {
-    alert("編集対象のテンプレートが正しく選択されていません。");
-    return;
-  }
-
-  // 🟢 空欄の行があれば、エラーにするのではなく、自動的に除外して保存に進む
-  const validItems = editingTemplateItems.filter(item => item.item_name && item.item_name.trim());
-  
-  if (validItems.length === 0) {
-    alert("保存する持ち物項目がありません。");
-    return;
-  }
-
-  btnSaveTemplate.disabled = true;
-  btnSaveTemplate.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin"></i> マスターデータを保存中...`;
-
-  try {
-// 🟢【完全復活版】ブラウザ側で確実なUUIDを生成して、SupabaseのIDエラーを根本から解決する
-    const recordsToUpsert = validItems.map((item, index) => {
-      return {
-        id: crypto.randomUUID(), // 👈 これで「null value in column id」のエラーを完全に防ぎます
-        template_id: item.template_id,
-        category: item.category,
-        item_name: item.item_name.trim(),
-        quantity: item.quantity,
-        unit: item.unit,
-        extra_quantity_per_night: item.extra_quantity_per_night,
-        sort_order: index + 1
-      };
-    });
-    if (item.id && !item.id.toString().startsWith('new_')) {
-      record.id = item.id;
-    }
-    return record;
-  });
-
-    // 既存の項目を一旦削除
-    const { error: deleteError } = await supabaseClient
-      .from("template_items")
-      .delete()
-      .eq("template_id", templateId);
-
-    if (deleteError) throw deleteError;
-
-    // 新しい配列を一括インサート
-    if (recordsToUpsert.length > 0) {
-      const { error: insertError } = await supabaseClient
-        .from("template_items")
-        .insert(recordsToUpsert);
-
-      if (insertError) throw insertError;
-    }
-
-    alert("🎉 テンプレートの変更（項目・数量・単位・順序）をすべて正常に保存しました！");
-    
-    // マスターが書き換わったので、現在の選択データを再読込
-    await renderTemplateDetails(templateId);
-    
-    // 表側のチェックボックス一覧用マスターも更新
-    await loadTemplates();
-
-  } catch (err) {
-    // 🟢 書き漏らしていた catch ブロック
-    console.error("マスター保存エラー:", err);
-    alert("保存に失敗しました: " + (err.message || JSON.stringify(err)));
-  } finally {
-    // 🟢 一緒に消えてしまっていた finally ブロック
-    btnSaveTemplate.disabled = false;
-    btnSaveTemplate.innerHTML = `<i class="fa-solid fa-floppy-disk"></i> テンプレートの変更をすべて保存`;
-  }
-}
-
-// ==========================================
 // 【完全安全版】データを消さずに上書き（upsert）する保存処理
 // ==========================================
 async function saveTemplateMaster() {
@@ -865,7 +785,8 @@ async function saveTemplateMaster() {
         sort_order: index + 1
       };
     });
-
+    return record;
+  }
     // 🟢【重要】一度削除するのをやめ、upsert（上書き保存）を実行する
     // これにより、万が一失敗しても元のデータが消えることは絶対にありません
     const { error: upsertError } = await supabaseClient
