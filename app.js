@@ -769,21 +769,24 @@ async function saveTemplateMaster() {
   btnSaveTemplate.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin"></i> マスターデータを保存中...`;
 
   try {
+// 🟢【完全復活版】ブラウザ側で確実なUUIDを生成して、SupabaseのIDエラーを根本から解決する
     const recordsToUpsert = validItems.map((item, index) => {
-      const record = {
+      return {
+        id: crypto.randomUUID(), // 👈 これで「null value in column id」のエラーを完全に防ぎます
         template_id: item.template_id,
         category: item.category,
         item_name: item.item_name.trim(),
         quantity: item.quantity,
         unit: item.unit,
         extra_quantity_per_night: item.extra_quantity_per_night,
-        sort_order: index + 1 // 連番を再割り当て
+        sort_order: index + 1
       };
-      if (item.id && !item.id.toString().startsWith('new_')) {
-        record.id = item.id;
-      }
-      return record;
     });
+    if (item.id && !item.id.toString().startsWith('new_')) {
+      record.id = item.id;
+    }
+    return record;
+  });
 
     // 既存の項目を一旦削除
     const { error: deleteError } = await supabaseClient
@@ -822,20 +825,19 @@ async function saveTemplateMaster() {
 }
 
 // ==========================================
-// 【完全版】編集したマスターデータをSupabaseへ一括保存
+// 【完全安全版】データを消さずに上書き（upsert）する保存処理
 // ==========================================
 async function saveTemplateMaster() {
-  // その場で確実に要素を捕まえる
   const selectEl = document.getElementById("view-template-select");
   const templateId = selectEl ? selectEl.value : null;
-  const btn = document.getElementById("btn-save-template"); // 🟢 変数エラーを防ぐためにその場でボタンを取得
+  const btn = document.getElementById("btn-save-template");
   
   if (!templateId) {
     alert("編集対象のテンプレートが正しく選択されていません。");
     return;
   }
 
-  // 空欄の行があれば、自動的に除外して保存に進む
+  // 空欄の行は自動的に除外
   const validItems = editingTemplateItems.filter(item => item.item_name && item.item_name.trim());
   
   if (validItems.length === 0) {
@@ -849,52 +851,39 @@ async function saveTemplateMaster() {
   }
 
   try {
+    // 🟢 upsert 用のデータを作成（新規行にはUUIDを付与、既存行はそのままのIDを維持）
     const recordsToUpsert = validItems.map((item, index) => {
-      const record = {
-        template_id: item.template_id,
+      const isNew = !item.id || item.id.toString().startsWith('new_');
+      return {
+        id: isNew ? crypto.randomUUID() : item.id, // 新規ならUUIDを生成、既存ならIDをそのまま渡して上書きさせる
+        template_id: templateId,
         category: item.category,
         item_name: item.item_name.trim(),
         quantity: item.quantity,
         unit: item.unit,
         extra_quantity_per_night: item.extra_quantity_per_night,
-        sort_order: index + 1 // 連番を再割り当て
+        sort_order: index + 1
       };
-      if (item.id && !item.id.toString().startsWith('new_')) {
-        record.id = item.id;
-      }
-      return record;
     });
 
-    // 既存の項目を一旦削除
-    const { error: deleteError } = await supabaseClient
+    // 🟢【重要】一度削除するのをやめ、upsert（上書き保存）を実行する
+    // これにより、万が一失敗しても元のデータが消えることは絶対にありません
+    const { error: upsertError } = await supabaseClient
       .from("template_items")
-      .delete()
-      .eq("template_id", templateId);
+      .upsert(recordsToUpsert, { onConflict: 'id' }); // idが一致するものは上書き、ないものは挿入
 
-    if (deleteError) throw deleteError;
+    if (upsertError) throw upsertError;
 
-    // 新しい配列を一括インサート
-    if (recordsToUpsert.length > 0) {
-      const { error: insertError } = await supabaseClient
-        .from("template_items")
-        .insert(recordsToUpsert);
-
-      if (insertError) throw insertError;
-    }
-
-    alert("🎉 テンプレートの変更（項目・数量・単位・順序）をすべて正常に保存しました！");
+    alert("🎉 テンプレートの変更をすべて正常に上書き保存しました！");
     
-    // マスターが書き換わったので、現在の選択データを再読込
+    // データの再読込
     await renderTemplateDetails(templateId);
-    
-    // 表側のチェックボックス一覧用マスターも更新
     await loadTemplates();
 
   } catch (err) {
     console.error("マスター保存エラー:", err);
-    alert("保存に失敗しました: " + (err.message || JSON.stringify(err)));
+    alert("保存に失敗しました（データは保護されています）: " + (err.message || JSON.stringify(err)));
   } finally {
-    // 🟢 btnSaveTemplate ではなく、安全に取得した btn を使う
     if (btn) {
       btn.disabled = false;
       btn.innerHTML = `<i class="fa-solid fa-floppy-disk"></i> テンプレートの変更をすべて保存`;
