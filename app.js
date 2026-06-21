@@ -752,7 +752,7 @@ function setupRealtimeSubscription() {
 }
 
 // ==========================================
-// 【完全安全版】データを消さずに上書き（upsert）する保存処理
+// 【安全・差分削除版】削除されたアイテムだけを狙い撃ちでdeleteし、残りはupsert
 // ==========================================
 async function saveTemplateMaster() {
   const selectEl = document.getElementById("view-template-select");
@@ -764,52 +764,79 @@ async function saveTemplateMaster() {
     return;
   }
 
-  // 空欄の行は自動的に除外
+  // 空欄の行は自動的に除外（これらが保存・維持対象）
   const validItems = editingTemplateItems.filter(item => item.item_name && item.item_name.trim());
   
-  if (validItems.length === 0) {
-    alert("保存する持ち物項目がありません。");
-    return;
-  }
-
   if (btn) {
     btn.disabled = true;
     btn.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin"></i> マスターデータを保存中...`;
   }
 
   try {
-    // 🟢 upsert 用のデータを作成（新規行にはUUIDを付与、既存行はそのままのIDを維持）
-    const recordsToUpsert = validItems.map((item, index) => {
-      const isNew = !item.id || item.id.toString().startsWith('new_');
-      return {
-        id: isNew ? crypto.randomUUID() : item.id, // 新規ならUUIDを生成、既存ならIDをそのまま渡して上書きさせる
-        template_id: templateId,
-        category: item.category,
-        item_name: item.item_name.trim(),
-        quantity: item.quantity,
-        unit: item.unit,
-        extra_quantity_per_night: item.extra_quantity_per_night,
-        sort_order: index + 1
-      };
-    });
-
-    // 🟢【重要】一度削除するのをやめ、upsert（上書き保存）を実行する
-    // これにより、万が一失敗しても元のデータが消えることは絶対にありません
-    const { error: upsertError } = await supabaseClient
+    // --- 1. 削除された項目だけを特定してピンポイントでDELETE ---
+    // 現在DBに登録されている最新データを一度取得する
+    const { data: dbItems, error: fetchError } = await supabaseClient
       .from("template_items")
-      .upsert(recordsToUpsert, { onConflict: 'id' }); // idが一致するものは上書き、ないものは挿入
+      .select("id")
+      .eq("template_id", templateId);
 
-    if (upsertError) throw upsertError;
+    if (fetchError) throw fetchError;
 
-    alert("🎉 テンプレートの変更をすべて正常に上書き保存しました！");
+    if (dbItems && dbItems.length > 0) {
+      // 画面に残っている有効なアイテムのIDリスト（新規追加の 'new_' は除く）
+      const remainingIds = validItems
+        .map(item => item.id)
+        .filter(id => id && !id.toString().startsWith('new_'));
+
+      // 「DBにはあるが、画面の残りリストにはないID」＝ 削除ボタンが押されたID
+      const idsToDelete = dbItems
+        .map(dbItem => dbItem.id)
+        .filter(dbId => !remainingIds.includes(dbId));
+
+      // 差分（削除対象）があれば、そのIDだけをピンポイントで消す
+      if (idsToDelete.length > 0) {
+        const { error: deleteError } = await supabaseClient
+          .from("template_items")
+          .delete()
+          .in("id", idsToDelete); // 👈 対象のIDだけを指定して削除
+
+        if (deleteError) throw deleteError;
+        console.log(`削除完了したID:`, idsToDelete);
+      }
+    }
+
+    // --- 2. 残った項目・新しく追加された項目をUPSERT（上書き・挿入） ---
+    if (validItems.length > 0) {
+      const recordsToUpsert = validItems.map((item, index) => {
+        const isNew = !item.id || item.id.toString().startsWith('new_');
+        return {
+          id: isNew ? crypto.randomUUID() : item.id, // 新規なら新しいUUID、既存なら元のID
+          template_id: templateId,
+          category: item.category,
+          item_name: item.item_name.trim(),
+          quantity: item.quantity,
+          unit: item.unit,
+          extra_quantity_per_night: item.extra_quantity_per_night,
+          sort_order: index + 1 // 現在の並び順で連番を再割り当て
+        };
+      });
+
+      const { error: upsertError } = await supabaseClient
+        .from("template_items")
+        .upsert(recordsToUpsert, { onConflict: 'id' });
+
+      if (upsertError) throw upsertError;
+    }
+
+    alert("🎉 テンプレートの変更を安全に保存しました！");
     
-    // データの再読込
+    // 最新状態に同期
     await renderTemplateDetails(templateId);
     await loadTemplates();
 
   } catch (err) {
     console.error("マスター保存エラー:", err);
-    alert("保存に失敗しました（データは保護されています）: " + (err.message || JSON.stringify(err)));
+    alert("保存に失敗しました: " + (err.message || JSON.stringify(err)));
   } finally {
     if (btn) {
       btn.disabled = false;
