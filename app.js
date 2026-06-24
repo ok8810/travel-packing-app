@@ -623,21 +623,37 @@ function renderChecklist() {
 
     catItems.forEach(item => {
       const itemRow = document.createElement("div");
-      itemRow.className = "flex items-center justify-between py-1.5 px-1 hover:bg-slate-50 rounded-lg transition duration-150";
+      itemRow.className = "flex items-center justify-between py-1.5 px-1 hover:bg-slate-50 rounded-lg transition duration-150 group"; // 👈 group クラスを追加しておくと便利です
       
       itemRow.innerHTML = `
         <label class="flex items-center gap-3 cursor-pointer flex-1 select-none">
           <input type="checkbox" ${item.is_checked ? "checked" : ""} class="checkbox-large rounded text-indigo-600 focus:ring-indigo-400 cursor-pointer">
           <span class="text-sm font-medium ${item.is_checked ? 'text-slate-400 line-through' : 'text-slate-700'}">${item.item_name}</span>
         </label>
-        <span class="text-xs font-bold ${item.is_checked ? 'text-slate-300' : 'text-slate-400'} bg-slate-50 border border-slate-100 px-2 py-1 rounded-md">
-          ${item.quantity} ${item.unit}
-        </span>
+        
+        <div class="flex items-center gap-2">
+          <span class="text-xs font-bold ${item.is_checked ? 'text-slate-300' : 'text-slate-400'} bg-slate-50 border border-slate-100 px-2 py-1 rounded-md">
+            ${item.quantity} ${item.unit}
+          </span>
+          <button class="btn-delete-list-item text-slate-300 hover:text-red-500 p-1 transition opacity-0 group-hover:opacity-100 focus:opacity-100" data-id="${item.id}" title="この項目を削除">
+            <i class="fa-solid fa-trash-can text-xs"></i>
+          </button>
+        </div>
       `;
 
+      // チェックボックスの変更イベント
       const checkbox = itemRow.querySelector('input[type="checkbox"]');
       if (checkbox) {
         checkbox.addEventListener("change", () => toggleItemCheck(item.id, item.is_checked));
+      }
+
+      // ➕ 削除ボタンのクリックイベントを追加
+      const deleteBtn = itemRow.querySelector('.btn-delete-list-item');
+      if (deleteBtn) {
+        deleteBtn.addEventListener("click", (e) => {
+          const id = e.currentTarget.dataset.id;
+          deleteItemFromTripList(id, item.item_name);
+        });
       }
 
       itemsList.appendChild(itemRow);
