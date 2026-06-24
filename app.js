@@ -635,7 +635,7 @@ function renderChecklist() {
           <span class="text-xs font-bold ${item.is_checked ? 'text-slate-300' : 'text-slate-400'} bg-slate-50 border border-slate-100 px-2 py-1 rounded-md">
             ${item.quantity} ${item.unit}
           </span>
-          <button class="btn-delete-list-item text-slate-300 hover:text-red-500 p-1 transition opacity-0 group-hover:opacity-100 focus:opacity-100" data-id="${item.id}" title="この項目を削除">
+          <button class="btn-delete-list-item text-slate-400 hover:text-red-500 p-1 transition" data-id="${item.id}" title="この項目を削除">
             <i class="fa-solid fa-trash-can text-xs"></i>
           </button>
         </div>
