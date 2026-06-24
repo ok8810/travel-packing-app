@@ -6,15 +6,27 @@
   <title>家族の持ち物リスト作成アプリ</title>
   <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <style>
     .checkbox-large { transform: scale(1.3); }
     .checked-item { text-decoration: line-through; color: #9ca3af; }
+    /* 確実にボタンを視認できるようにするための緊急用スタイル */
+    .btn-delete-list-item {
+      display: inline-flex !important;
+      align-items: center;
+      justify-content: center;
+      min-width: 28px;
+      min-height: 28px;
+    }
   </style>
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen pb-12">
 
-  <div class="max-w-md md:max-w-4xl xl:max-w-7xl mx-auto px-4 pt-6">
+  <div class="absolute top-2 right-4 text-[10px] font-mono text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md z-50">
+    Ver.1.5.10
+  </div>
+
+  <div class="max-w-md md:max-w-4xl xl:max-w-7xl mx-auto px-4 pt-8">
     
     <div class="flex border-b border-slate-200 mb-6 bg-slate-50 p-1.5 rounded-xl">
       <button id="tab-create" class="flex-1 py-2 px-4 rounded-lg font-bold text-sm bg-white text-indigo-600 shadow-sm transition cursor-pointer">
@@ -102,6 +114,6 @@
     
   </div>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=1.5.10"></script>
 </body>
 </html>
