@@ -1,4 +1,4 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
@@ -15,11 +15,12 @@
 <body class="bg-slate-50 text-slate-800 min-h-screen pb-12">
 
   <div class="max-w-md md:max-w-4xl xl:max-w-7xl mx-auto px-4 pt-6">
+    
     <div class="flex border-b border-slate-200 mb-6 bg-slate-50 p-1.5 rounded-xl">
-      <button id="tab-create" class="flex-1 py-2 px-4 rounded-lg font-bold text-sm bg-white text-indigo-600 shadow-sm transition">
+      <button id="tab-create" class="flex-1 py-2 px-4 rounded-lg font-bold text-sm bg-white text-indigo-600 shadow-sm transition cursor-pointer">
         <i class="fa-solid fa-wand-magic-sparkles mr-1.5"></i>リストを作成
       </button>
-      <button id="tab-view" class="flex-1 py-2 px-4 rounded-lg font-bold text-sm text-slate-500 hover:text-slate-800 transition">
+      <button id="tab-view" class="flex-1 py-2 px-4 rounded-lg font-bold text-sm text-slate-500 hover:text-slate-800 transition cursor-pointer">
         <i class="fa-solid fa-eye mr-1.5"></i>テンプレートを確認
       </button>
     </div>
@@ -39,8 +40,8 @@
           <div class="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
             <div id="progress-bar" class="bg-indigo-500 h-full w-0 transition-all duration-300"></div>
           </div>
-          <div id="generated-condition-text" class="text-[11px] font-medium text-slate-400 bg-slate-50/50 rounded-lg p-2 border border-slate-100/50 hidden">
-            </div>
+          <div id="generated-condition-text" class="mt-3 text-[11px] font-medium text-slate-400 bg-slate-50/50 rounded-lg p-2 border border-slate-100/50 hidden">
+          </div>
         </div>
       </div>
 
@@ -57,10 +58,10 @@
         </div>
 
         <div class="mb-4">
-          <label for="stay-nights" class="block text-xs font-bold text-slate-500 mb-1">2. 何泊しますか？（日帰りの場合は1）</label>
+          <label class="block text-xs font-bold text-slate-500 mb-1">2. 何泊しますか？</label>
           <div class="flex items-center gap-2">
             <input type="number" id="stay-nights" value="1" min="1" class="w-20 px-3 py-1.5 border border-slate-200 rounded-lg text-center font-bold text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            <span class="text-sm font-bold text-slate-600">泊 <span class="text-xs font-normal text-slate-400">（<span id="stay-days">2</span>泊3日）</span></span>
+            <span class="text-sm font-bold text-slate-600">泊 <span class="text-xs font-normal text-slate-400">（<span id="stay-days">2</span>日）</span></span>
           </div>
         </div>
 
@@ -69,8 +70,8 @@
         </button>
       </div>
 
-      <div id="list-container" class="space-y-6">
-        <div class="text-center py-8 text-slate-400">
+      <div id="list-container">
+        <div class="text-center py-8 text-slate-400 bg-white rounded-2xl border border-slate-100 shadow-sm">
           <i class="fa-solid fa-circle-notch animate-spin text-2xl text-indigo-400 mb-2"></i>
           <p class="text-sm">データを読み込み中...</p>
         </div>
@@ -90,7 +91,7 @@
         </button>
       </div>
 
-      <div id="view-template-content" class="space-y-4"></div>
+      <div id="view-template-content"></div>
 
       <div class="pt-2">
         <button id="btn-save-template" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-4 rounded-xl shadow-md transition duration-200 flex items-center justify-center gap-2 text-sm cursor-pointer">
@@ -98,7 +99,6 @@
         </button>
       </div>
     </div>
-
     
   </div>
 
