@@ -736,6 +736,34 @@ async function addNewItemToTripList(category, formContainer) {
   }
 }
 
+
+// ==========================================
+// 【新規追加】個別の持ち物を trip_list_items から削除する処理
+// ==========================================
+async function deleteItemFromTripList(id, itemName) {
+  if (!id) return;
+  
+  // 誤操作防止の確認ダイアログ
+  if (!confirm(`「${itemName}」をこのリストから削除してもよろしいですか？`)) {
+    return;
+  }
+
+  const { error } = await supabaseClient
+    .from("trip_list_items")
+    .delete()
+    .eq("id", id);
+
+  if (error) {
+    console.error("個別アイテムの削除失敗:", error);
+    alert("削除に失敗しました。");
+  } else {
+    // 💡 成功時はリアルタイム同期（setupRealtimeSubscription）によって
+    // 自動的に最新のリストが再取得（fetchCurrentList）され、画面が更新されます。
+    console.log(`削除完了: ${itemName} (${id})`);
+  }
+}
+
+
 // ==========================================
 // 8. 進捗バーの更新
 // ==========================================
