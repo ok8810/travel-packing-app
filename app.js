@@ -104,7 +104,8 @@ function setupTabEvents() {
 async function loadTemplates() {
   try {
     const res = await fetch(`${GAS_API_URL}?action=get_templates`);
-    templates = await res.json();
+    const textData = await res.text(); // 一旦テキストとして取得
+    templates = JSON.parse(textData);  // 安全にJSONパース
 
     if (!Array.isArray(templates)) templates = [];
 
