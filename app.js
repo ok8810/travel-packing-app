@@ -3,6 +3,31 @@
 // ==========================================
 const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxEzdHaZDIUjGiDP-03EJKKAZDq0fe_OUAPk3cuwfqo4wba7nQHrtPxxRR3RoCCZJG0wQ/exec";
 
+// 🟢 CORS/302リダイレクト制限を回避する通信関数
+function fetchJSONP(url) {
+  return new Promise((resolve, reject) => {
+    const callbackName = "jsonp_cb_" + Math.random().toString(36).substring(2, 15);
+    const script = document.createElement("script");
+
+    const delimiter = url.includes("?") ? "&" : "?";
+    script.src = `${url}${delimiter}callback=${callbackName}`;
+
+    window[callbackName] = (data) => {
+      resolve(data);
+      document.body.removeChild(script);
+      delete window[callbackName];
+    };
+
+    script.onerror = () => {
+      reject(new Error("通信エラーが発生しました"));
+      document.body.removeChild(script);
+      delete window[callbackName];
+    };
+
+    document.body.appendChild(script);
+  });
+}
+
 // アプリのグローバル状態
 let templates = [];
 let currentItems = [];
@@ -95,13 +120,12 @@ function setupTabEvents() {
 // ==========================================
 // 1. スプレッドシートからテンプレート取得
 // ==========================================
+// 1. loadTemplates 内の通信を差し替え
 async function loadTemplates() {
   try {
-    const res = await fetch(`${GAS_API_URL}?action=get_templates`, { redirect: "follow" });
-    const textData = await res.text();
-    templates = JSON.parse(textData);
-
-    if (!Array.isArray(templates)) templates = [];
+    // fetch から fetchJSONP へ変更
+    const data = await fetchJSONP(`${GAS_API_URL}?action=get_templates`);
+    templates = Array.isArray(data) ? data : [];
 
     const targetEl = document.getElementById("template-checkboxes") || document.getElementById("template-list");
     if (targetEl) {
@@ -126,17 +150,13 @@ async function loadTemplates() {
     console.error("テンプレート一覧取得エラー:", err);
   }
 }
-
 // ==========================================
 // 2. 現在の持ち物リストの取得
 // ==========================================
 async function fetchCurrentList() {
   try {
-    const res = await fetch(`${GAS_API_URL}?action=get_trip_list`, { redirect: "follow" });
-    const textData = await res.text();
-    const items = JSON.parse(textData);
-
-    let fetchedItems = Array.isArray(items) ? items : [];
+    const data = await fetchJSONP(`${GAS_API_URL}?action=get_trip_list`);
+    let fetchedItems = Array.isArray(data) ? data : [];
 
     fetchedItems.sort((a, b) => {
       let indexA = CATEGORY_ORDER.indexOf(a.category);
@@ -346,11 +366,8 @@ async function renderTemplateDetails(templateName) {
   viewTemplateContent.innerHTML = `<div class="p-8 text-center text-slate-400"><i class="fa-solid fa-circle-notch animate-spin text-2xl"></i> スプレッドシートを読み込み中...</div>`;
 
   try {
-    const res = await fetch(`${GAS_API_URL}?action=get_template_items&template=${encodeURIComponent(templateName)}`, { redirect: "follow" });
-    const textData = await res.text();
-    const items = JSON.parse(textData);
-
-    editingTemplateItems = Array.isArray(items) ? items : [];
+    const data = await fetchJSONP(`${GAS_API_URL}?action=get_template_items&template=${encodeURIComponent(templateName)}`);
+    editingTemplateItems = Array.isArray(data) ? data : [];
 
     renderTemplateEditForm();
   } catch (err) {
