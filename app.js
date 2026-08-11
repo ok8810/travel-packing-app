@@ -4,12 +4,11 @@
 const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxEzdHaZDIUjGiDP-03EJKKAZDq0fe_OUAPk3cuwfqo4wba7nQHrtPxxRR3RoCCZJG0wQ/exec";
 
 // アプリのグローバル状態
-let templates = [];            // テンプレート名（シート名）一覧
-let currentItems = [];         // 現在の旅行持ち物リスト
-let editingTemplateItems = []; // 編集中のマスターテンプレート項目
+let templates = [];
+let currentItems = [];
+let editingTemplateItems = [];
 
-// 🟢 優先させたいカテゴリ（家族）の並び順（お好みに合わせて並び替えてください）
-const CATEGORY_ORDER = ["琴晴", "穂香", "遥菜", "ママ", "パパ", "共通"];
+const CATEGORY_ORDER = ["共通", "パパ", "ママ", "琴晴", "長女", "次女", "三女"];
 
 // DOM要素の取得
 const templateCheckboxes = document.getElementById("template-checkboxes");
@@ -24,13 +23,12 @@ const viewTemplateContent = document.getElementById("view-template-content");
 const btnSaveTemplate = document.getElementById("btn-save-template");
 const btnAddCategory = document.getElementById("btn-add-category");
 
-// ==========================================
-// アプリ初期化
-// ==========================================
 document.addEventListener("DOMContentLoaded", async () => {
   console.log("持ち物アプリ: GAS連携モード起動");
 
-  // 1. 泊数入力の連動変更
+  // 🔍 要素チェック
+  console.log("templateCheckboxes要素:", templateCheckboxes);
+
   if (stayNightsInput) {
     stayNightsInput.addEventListener("input", () => {
       const nights = parseInt(stayNightsInput.value) || 1;
@@ -38,66 +36,55 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
-  // 2. タブ切り替えイベント
+  console.log("STEP 1: タブイベント設定開始");
   setupTabEvents();
 
-  // 3. 一括保存ボタンイベント設定
-  if (btnSaveTemplate) {
-    btnSaveTemplate.addEventListener("click", saveTemplateMaster);
+  console.log("STEP 2: イベント設定完了。テンプレート読み込み呼び出し直前");
+  
+  try {
+    await loadTemplates();
+    console.log("STEP 3: loadTemplates完了");
+  } catch (e) {
+    console.error("loadTemplates実行中例外:", e);
   }
 
-  // 4. カテゴリ追加ボタンイベント
-  if (btnAddCategory) {
-    btnAddCategory.addEventListener("click", addNewCategoryToTemplate);
+  try {
+    await fetchCurrentList();
+    console.log("STEP 4: fetchCurrentList完了");
+  } catch (e) {
+    console.error("fetchCurrentList実行中例外:", e);
   }
-
-  // 5. 確認用ドロップダウンの変更イベント
-  if (viewTemplateSelect) {
-    viewTemplateSelect.addEventListener("change", (e) => {
-      renderTemplateDetails(e.target.value);
-    });
-  }
-
-  // 6. リスト作成ボタンイベント
-  if (btnGenerate) {
-    btnGenerate.addEventListener("click", generateListFromTemplates);
-  }
-
-  // 7. 初期データの読み込み（テンプレート＆現在のリスト）
-  await loadTemplates();
-  await fetchCurrentList();
 });
 
-// ==========================================
-// タブ切り替え処理
-// ==========================================
-function setupTabEvents() {
-  const tabGenerate = document.getElementById("tab-generate");
-  const tabMaster = document.getElementById("tab-master");
-  const panelGenerate = document.getElementById("panel-generate");
-  const panelMaster = document.getElementById("panel-master");
+async function loadTemplates() {
+  console.log("loadTemplates関数が実行されました");
+  try {
+    const url = `${GAS_API_URL}?action=get_templates`;
+    console.log("リクエスト送信先:", url);
+    const res = await fetch(url);
+    console.log("レスポンスステータス:", res.status);
+    
+    const textData = await res.text();
+    console.log("取得した生データ:", textData);
+    
+    templates = JSON.parse(textData);
+    console.log("パース後データ:", templates);
 
-  if (!tabGenerate || !tabMaster) return;
-
-  tabGenerate.addEventListener("click", () => {
-    tabGenerate.className = "flex-1 py-3 px-4 text-center font-bold border-b-2 border-emerald-500 text-emerald-600 bg-emerald-50/50";
-    tabMaster.className = "flex-1 py-3 px-4 text-center font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600";
-    panelGenerate.classList.remove("hidden");
-    panelMaster.classList.add("hidden");
-  });
-
-  tabMaster.addEventListener("click", () => {
-    tabMaster.className = "flex-1 py-3 px-4 text-center font-bold border-b-2 border-emerald-500 text-emerald-600 bg-emerald-50/50";
-    tabGenerate.className = "flex-1 py-3 px-4 text-center font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600";
-    panelMaster.classList.remove("hidden");
-    panelGenerate.classList.add("hidden");
-
-    if (viewTemplateSelect && viewTemplateSelect.value) {
-      renderTemplateDetails(viewTemplateSelect.value);
+    if (templateCheckboxes) {
+      templateCheckboxes.innerHTML = templates.map((tplName, idx) => `
+        <label class="flex items-center gap-2 p-3 bg-slate-50 rounded-xl border border-slate-100 hover:bg-emerald-50 hover:border-emerald-200 transition-all cursor-pointer">
+          <input type="checkbox" value="${tplName}" class="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500 tpl-checkbox" ${idx === 0 ? 'checked' : ''}>
+          <span class="text-sm font-medium text-slate-700">${tplName}</span>
+        </label>
+      `).join("");
+      console.log("チェックボックス描画完了");
+    } else {
+      console.warn("templateCheckboxes 要素（#template-checkboxes）が見つかりません！");
     }
-  });
+  } catch (err) {
+    console.error("loadTemplates内でエラー発生:", err);
+  }
 }
-
 // ==========================================
 // 1. スプレッドシートからテンプレート（シート一覧）取得
 // ==========================================
