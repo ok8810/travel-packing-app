@@ -88,35 +88,49 @@ document.addEventListener("DOMContentLoaded", async () => {
 });
 
 // ==========================================
-// タブ切り替え処理（エラー回避のため定義を統合）
+// タブ切り替え処理（HTMLのID名に完全対応）
 // ==========================================
 function setupTabEvents() {
-  const tabGenerate = document.getElementById("tab-generate");
-  const tabMaster = document.getElementById("tab-master");
-  const panelGenerate = document.getElementById("panel-generate");
-  const panelMaster = document.getElementById("panel-master");
+  const tabCreate = document.getElementById("tab-create");
+  const tabView = document.getElementById("tab-view");
+  const createModeArea = document.getElementById("create-mode-area");
+  const viewModeArea = document.getElementById("view-mode-area");
 
-  if (!tabGenerate || !tabMaster) return;
+  if (!tabCreate || !tabView || !createModeArea || !viewModeArea) {
+    console.warn("タブ要素または切り替えエリアが見つかりません。");
+    return;
+  }
 
-  tabGenerate.addEventListener("click", () => {
-    tabGenerate.className = "flex-1 py-3 px-4 text-center font-bold border-b-2 border-emerald-500 text-emerald-600 bg-emerald-50/50";
-    tabMaster.className = "flex-1 py-3 px-4 text-center font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600";
-    if (panelGenerate) panelGenerate.classList.remove("hidden");
-    if (panelMaster) panelMaster.classList.add("hidden");
+  // 1. 「リストを作成」タブをクリックした時
+  tabCreate.addEventListener("click", () => {
+    // タブ見た目の切り替え（アクティブ化）
+    tabCreate.className = "flex-1 py-2 px-4 rounded-lg font-bold text-sm bg-white text-indigo-600 shadow-sm transition cursor-pointer";
+    tabView.className = "flex-1 py-2 px-4 rounded-lg font-bold text-sm text-slate-500 hover:text-slate-800 transition cursor-pointer";
+
+    // エリアの表示・非表示
+    createModeArea.classList.remove("hidden");
+    viewModeArea.classList.add("hidden");
   });
 
-  tabMaster.addEventListener("click", () => {
-    tabMaster.className = "flex-1 py-3 px-4 text-center font-bold border-b-2 border-emerald-500 text-emerald-600 bg-emerald-50/50";
-    tabGenerate.className = "flex-1 py-3 px-4 text-center font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600";
-    if (panelMaster) panelMaster.classList.remove("hidden");
-    if (panelGenerate) panelGenerate.classList.add("hidden");
+  // 2. 「テンプレートを確認」タブをクリックした時
+  tabView.addEventListener("click", () => {
+    // タブ見た目の切り替え（アクティブ化）
+    tabView.className = "flex-1 py-2 px-4 rounded-lg font-bold text-sm bg-white text-indigo-600 shadow-sm transition cursor-pointer";
+    tabCreate.className = "flex-1 py-2 px-4 rounded-lg font-bold text-sm text-slate-500 hover:text-slate-800 transition cursor-pointer";
 
+    // エリアの表示・非表示
+    viewModeArea.classList.remove("hidden");
+    createModeArea.classList.add("hidden");
+
+    // 🟢 テンプレート詳細を描画（選択されているドロップダウン値または最初のテンプレート）
+    const viewTemplateSelect = document.getElementById("view-template-select");
     if (viewTemplateSelect && viewTemplateSelect.value) {
       renderTemplateDetails(viewTemplateSelect.value);
+    } else if (templates && templates.length > 0) {
+      renderTemplateDetails(templates[0]);
     }
   });
 }
-
 // ==========================================
 // 1. スプレッドシートからテンプレート取得
 // ==========================================
