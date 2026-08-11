@@ -1,41 +1,34 @@
-
 // ==========================================
-// 1. Supabase 初期設定 (ご自身の情報に書き換えてください)
+// Google Apps Script (GAS) 連携設定
 // ==========================================
-const SUPABASE_URL = 'https://wexmfasuheekporlgcbf.supabase.co'; 
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndleG1mYXN1aGVla3BvcmxnY2JmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwMTYwMjIsImV4cCI6MjA5NjU5MjAyMn0.VSWvnIMb_RpsiukTj7WRYk4V1VuQ6aIZF3bJ9nuxgwc'; 
+const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxEzdHaZDIUjGiDP-03EJKKAZDq0fe_OUAPk3cuwfqo4wba7nQHrtPxxRR3RoCCZJG0wQ/exec";
 
-const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// アプリのグローバル状態
+let templates = [];            // テンプレート名（シート名）一覧
+let currentItems = [];         // 現在の旅行持ち物リスト
+let editingTemplateItems = []; // 編集中のマスターテンプレート項目
 
-// HTML要素の取得
-const templateOptionsContainer = document.getElementById("template-options");
+// 🟢 優先させたいカテゴリ（家族）の並び順（お好みに合わせて並び替えてください）
+const CATEGORY_ORDER = ["共通", "パパ", "ママ", "琴晴", "長女", "次女", "三女"];
+
+// DOM要素の取得
+const templateCheckboxes = document.getElementById("template-checkboxes");
 const stayNightsInput = document.getElementById("stay-nights");
 const stayDaysText = document.getElementById("stay-days");
 const btnGenerate = document.getElementById("btn-generate");
 const listContainer = document.getElementById("list-container");
-const progressBar = document.getElementById("progress-bar");
 const progressText = document.getElementById("progress-text");
-
-// 【新規】タブ・確認モード用の要素
-const tabCreate = document.getElementById("tab-create");
-const tabView = document.getElementById("tab-view");
-const createModeArea = document.getElementById("create-mode-area");
-const viewModeArea = document.getElementById("view-mode-area");
+const progressBar = document.getElementById("progress-bar");
 const viewTemplateSelect = document.getElementById("view-template-select");
 const viewTemplateContent = document.getElementById("view-template-content");
-
-// アプリ内状態管理
-let currentItems = [];
-let allTemplates = []; // 読み込んだテンプレート一覧を保持
+const btnSaveTemplate = document.getElementById("btn-save-template");
+const btnAddCategory = document.getElementById("btn-add-category");
 
 // ==========================================
-// 2. 初期化処理 (読み込み時に動くもの)
+// アプリ初期化
 // ==========================================
 document.addEventListener("DOMContentLoaded", async () => {
-  console.log("持ち物アプリ: 確認機能付きロジック起動");
-
-  const btnSaveTemplate = document.getElementById("btn-save-template");
-  const btnAddCategory = document.getElementById("btn-add-category");
+  console.log("持ち物アプリ: GAS連携モード起動");
 
   // 1. 泊数入力の連動変更
   if (stayNightsInput) {
@@ -45,79 +38,60 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
-  // 2. モード切り替えタブのイベント設定
+  // 2. タブ切り替えイベント
   setupTabEvents();
 
-  // 3. マスターテンプレート一覧の取得（作成用と確認用の両方に分配）
-  await loadTemplates();
-  
-  // 変更一括保存ボタンのイベント
+  // 3. 一括保存ボタンイベント設定
   if (btnSaveTemplate) {
     btnSaveTemplate.addEventListener("click", saveTemplateMaster);
   }
-  
-  // カテゴリ追加ボタンのイベント
+
+  // 4. カテゴリ追加ボタンイベント
   if (btnAddCategory) {
-    btnAddCategory.addEventListener("click", () => {
-      const cat = prompt("追加したい家族のカテゴリ名（例: 共通, 子供部屋 など）を入力してください:");
-      if (cat) {
-        // 空のアイテムを1つ作って末尾に追加
-        editingTemplateItems.push({
-          id: 'new_' + Date.now(),
-          template_id: viewTemplateSelect.value,
-          category: cat.trim(),
-          item_name: '',
-          quantity: 1,
-          unit: '個',
-          extra_quantity_per_night: 0,
-          sort_order: editingTemplateItems.length + 1
-        });
-        renderTemplateEditForm();
-      }
-    });
+    btnAddCategory.addEventListener("click", addNewCategoryToTemplate);
   }
 
-  // 4. 確認用ドロップダウンが変更された時のイベント
+  // 5. 確認用ドロップダウンの変更イベント
   if (viewTemplateSelect) {
     viewTemplateSelect.addEventListener("change", (e) => {
       renderTemplateDetails(e.target.value);
     });
   }
 
-  // 5. 現在のチェックリストの初回読み込み
-  await fetchCurrentList();
-
-  // 6. Supabaseのリアルタイム同期を開始
-  setupRealtimeSubscription();
-
-  // 7. ボタンイベント設定
+  // 6. リスト作成ボタンイベント
   if (btnGenerate) {
     btnGenerate.addEventListener("click", generateListFromTemplates);
   }
+
+  // 7. 初期データの読み込み（テンプレート＆現在のリスト）
+  await loadTemplates();
+  await fetchCurrentList();
 });
 
 // ==========================================
-// 【新規】タブ切り替えのUI制御
+// タブ切り替え処理
 // ==========================================
 function setupTabEvents() {
-  if (!tabCreate || !tabView || !createModeArea || !viewModeArea) return;
+  const tabGenerate = document.getElementById("tab-generate");
+  const tabMaster = document.getElementById("tab-master");
+  const panelGenerate = document.getElementById("panel-generate");
+  const panelMaster = document.getElementById("panel-master");
 
-  tabCreate.addEventListener("click", () => {
-    // リスト作成モードをアクティブに
-    tabCreate.className = "flex-1 py-2 px-4 rounded-lg font-bold text-sm bg-white text-indigo-600 shadow-sm transition";
-    tabView.className = "flex-1 py-2 px-4 rounded-lg font-bold text-sm text-slate-500 hover:text-slate-800 transition";
-    createModeArea.classList.remove("hidden");
-    viewModeArea.classList.add("hidden");
+  if (!tabGenerate || !tabMaster) return;
+
+  tabGenerate.addEventListener("click", () => {
+    tabGenerate.className = "flex-1 py-3 px-4 text-center font-bold border-b-2 border-emerald-500 text-emerald-600 bg-emerald-50/50";
+    tabMaster.className = "flex-1 py-3 px-4 text-center font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600";
+    panelGenerate.classList.remove("hidden");
+    panelMaster.classList.add("hidden");
   });
 
-  tabView.addEventListener("click", () => {
-    // テンプレート確認モードをアクティブに
-    tabView.className = "flex-1 py-2 px-4 rounded-lg font-bold text-sm bg-white text-indigo-600 shadow-sm transition";
-    tabCreate.className = "flex-1 py-2 px-4 rounded-lg font-bold text-sm text-slate-500 hover:text-slate-800 transition";
-    createModeArea.classList.add("hidden");
-    viewModeArea.classList.remove("hidden");
+  tabMaster.addEventListener("click", () => {
+    tabMaster.className = "flex-1 py-3 px-4 text-center font-bold border-b-2 border-emerald-500 text-emerald-600 bg-emerald-50/50";
+    tabGenerate.className = "flex-1 py-3 px-4 text-center font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600";
+    panelMaster.classList.remove("hidden");
+    panelGenerate.classList.add("hidden");
 
-    // 確認画面を開いた時、選択されているテンプレートの詳細を初回描画
     if (viewTemplateSelect && viewTemplateSelect.value) {
       renderTemplateDetails(viewTemplateSelect.value);
     }
@@ -125,427 +99,163 @@ function setupTabEvents() {
 }
 
 // ==========================================
-// 3. テンプレート一覧を読み込んでUIに表示 (分配処理に拡張)
+// 1. スプレッドシートからテンプレート（シート一覧）取得
 // ==========================================
 async function loadTemplates() {
-  const { data: templates, error } = await supabaseClient
-    .from("templates")
-    .select("*")
-    .order("name", { ascending: true });
+  try {
+    const res = await fetch(`${GAS_API_URL}?action=get_templates`);
+    templates = await res.json();
 
-  if (error) {
-    console.error("テンプレート取得エラー:", error);
-    if (templateOptionsContainer) templateOptionsContainer.innerHTML = `<div class="text-red-500 text-xs">読み込みに失敗しました</div>`;
-    return;
-  }
+    if (!Array.isArray(templates)) templates = [];
 
-  allTemplates = templates || [];
-
-  // --- A. 従来の「作成パネル」へのチェックボックス描画 ---
-  if (templateOptionsContainer) {
-    templateOptionsContainer.innerHTML = "";
-    if (allTemplates.length > 0) {
-      allTemplates.forEach(tpl => {
-        const label = document.createElement("label");
-        label.className = "flex items-center gap-2 p-2 bg-slate-50 border border-slate-100 rounded-lg cursor-pointer hover:bg-slate-100 transition";
-        label.innerHTML = `
-          <input type="checkbox" name="template-select" value="${tpl.id}" class="rounded text-indigo-600 focus:ring-indigo-400">
-          <span class="font-medium text-slate-700">${tpl.name}</span>
-        `;
-        templateOptionsContainer.appendChild(label);
-      });
-    } else {
-      templateOptionsContainer.innerHTML = `<div class="text-slate-400 text-xs py-2">有効なテンプレートがありません</div>`;
+    // 作成用チェックボックスのレンダリング
+    if (templateCheckboxes) {
+      templateCheckboxes.innerHTML = templates.map((tplName, idx) => `
+        <label class="flex items-center gap-2 p-3 bg-slate-50 rounded-xl border border-slate-100 hover:bg-emerald-50 hover:border-emerald-200 transition-all cursor-pointer">
+          <input type="checkbox" value="${tplName}" class="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500 tpl-checkbox" ${idx === 0 ? 'checked' : ''}>
+          <span class="text-sm font-medium text-slate-700">${tplName}</span>
+        </label>
+      `).join("");
     }
-  }
 
-  // --- B. 【新規】「確認パネル」のセレクトボックスへの挿入 ---
-  if (viewTemplateSelect) {
-    viewTemplateSelect.innerHTML = allTemplates.map(tpl => 
-      `<option value="${tpl.id}">${tpl.name}</option>`
-    ).join("");
-  }
-}
+    // マスター確認用ドロップダウンのレンダリング
+    if (viewTemplateSelect) {
+      viewTemplateSelect.innerHTML = templates.map(tplName => `
+        <option value="${tplName}">${tplName}</option>
+      `).join("");
 
-// ==========================================
-// テンプレートデータを取得して編集用配列へ格納
-// ==========================================
-async function renderTemplateDetails(templateId) {
-  if (!viewTemplateContent || !templateId) return;
-
-  viewTemplateContent.innerHTML = `
-    <div class="text-center py-8 text-slate-400">
-      <i class="fa-solid fa-circle-notch animate-spin text-xl mb-2 text-indigo-400"></i>
-      <p class="text-xs">マスターデータを読み込み中...</p>
-    </div>`;
-
-  const { data: items, error } = await supabaseClient
-    .from("template_items")
-    .select("*")
-    .eq("template_id", templateId)
-    .order("sort_order", { ascending: true })
-    .order("id", { ascending: true });
-
-  if (error) {
-    console.error("テンプレートアイテムの取得失敗:", error);
-    viewTemplateContent.innerHTML = `<div class="text-red-500 text-sm p-4">データの取得に失敗しました。</div>`;
-    return;
-  }
-
-  // 編集用の一時配列にデータをコピー
-  editingTemplateItems = items || [];
-  renderTemplateEditForm();
-}
-
-// ==========================================
-// 編集用配列を元に、画面にフォームをレンダリングする（並び替え・追加・削除対応）
-// ==========================================
-function renderTemplateEditForm() {
-  if (!viewTemplateContent) return;
-// 🟢【修正版】スマホは1列、タブレットは2列、普通のPCは3列、大画面PCなら4列に可変するグリッド
-  viewTemplateContent.className = "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 space-y-0";
-  viewTemplateContent.innerHTML = "";
-
-  if (editingTemplateItems.length === 0) {
-    viewTemplateContent.innerHTML = `<div class="text-slate-400 text-xs text-center py-6">項目がありません。右上のボタンからカテゴリを追加してください。</div>`;
-    return;
-  }
-
-// カテゴリごとにグループ化
-  const grouped = {};
-  editingTemplateItems.forEach((item, index) => {
-    // 🟢 常に「現在の配列の最新のインデックス」を確実に保持させる
-    item.originalIndex = index; 
-    if (!grouped[item.category]) {
-      grouped[item.category] = [];
-    }
-    grouped[item.category].push(item);
-  });
-
-  for (const category in grouped) {
-    const card = document.createElement("div");
-    card.className = "bg-white rounded-2xl p-4 shadow-sm border border-slate-100 mb-4";
-
-    // ヘッダー（カテゴリ名 ＆ そのカテゴリへの行追加ボタン）
-    const header = document.createElement("div");
-    header.className = "flex justify-between items-center mb-3 pb-2 border-b border-slate-100";
-    header.innerHTML = `
-      <h4 class="text-sm font-bold text-slate-800"><i class="fa-solid fa-user text-indigo-400 mr-1.5"></i>${category}</h4>
-      <button class="btn-master-add text-[11px] bg-indigo-50 hover:bg-indigo-100 text-indigo-600 font-bold px-2 py-1 rounded-md transition" data-category="${category}">
-        <i class="fa-solid fa-plus mr-1"></i>持物追加
-      </button>
-    `;
-    card.appendChild(header);
-
-    // 各持ち物行のフォーム生成
-    const listWrapper = document.createElement("div");
-    listWrapper.className = "space-y-2";
-
-    grouped[category].forEach((item, idx) => {
-      const row = document.createElement("div");
-      row.className = "flex items-center gap-1.5 p-1.5 hover:bg-slate-50 rounded-lg transition text-xs";
-
-      // 🔼 🔽 並び替えボタンの活性・非活性制御
-      const isFirst = idx === 0;
-      const isLast = idx === grouped[category].length - 1;
-
-      row.innerHTML = `
-        <div class="flex flex-col gap-0.5">
-          <button class="btn-move-up text-slate-400 hover:text-indigo-600 disabled:opacity-20" ${isFirst ? 'disabled' : ''} data-index="${item.originalIndex}"><i class="fa-solid fa-caret-up text-sm"></i></button>
-          <button class="btn-move-down text-slate-400 hover:text-indigo-600 disabled:opacity-20" ${isLast ? 'disabled' : ''} data-index="${item.originalIndex}"><i class="fa-solid fa-caret-down text-sm"></i></button>
-        </div>
-        
-        <input type="text" value="${item.item_name || ''}" placeholder="持ち物名" class="change-name flex-1 min-w-0 px-2 py-1.5 border border-slate-200 rounded-lg font-medium text-slate-700" data-index="${item.originalIndex}">
-        
-        <input type="number" value="${item.quantity}" min="0" class="change-qty w-11 px-1 py-1.5 border border-slate-200 rounded-lg font-bold text-center text-slate-700" data-index="${item.originalIndex}">
-        
-        <input type="text" value="${item.unit || '個'}" placeholder="単位" class="change-unit w-10 px-1 py-1.5 border border-slate-200 rounded-lg text-center text-slate-600" data-index="${item.originalIndex}">
-        
-        <div class="flex items-center gap-0.5 bg-indigo-50/50 rounded-lg px-1 py-0.5 border border-indigo-100/30">
-          <span class="text-[10px] text-indigo-400 font-bold">+</span>
-          <input type="number" value="${item.extra_quantity_per_night || 0}" min="0" class="change-extra w-9 bg-transparent font-semibold text-center text-indigo-600 focus:outline-none" data-index="${item.originalIndex}">
-        </div>
-
-        <button class="btn-master-del text-slate-300 hover:text-red-500 p-1 transition" data-index="${item.originalIndex}">
-          <i class="fa-solid fa-trash-can"></i>
-        </button>
-      `;
-      listWrapper.appendChild(row);
-    });
-    card.appendChild(listWrapper);
-    viewTemplateContent.appendChild(card);
-  }
-
-  // --- 各種入力変更・ボタン操作のイベントバインド ---
-  setupFormEventListeners();
-}
-
-// フォーム内の文字変更や各ボタンの挙動を一時配列にリアルタイム連動させる
-function setupFormEventListeners() {
- // 🟢【修正版】イベント発生源（currentTargetやtarget）の dataset.index から確実に配列と同期させる
-  viewTemplateContent.querySelectorAll(".change-name").forEach(el => el.addEventListener("input", (e) => {
-    const idx = e.currentTarget.dataset.index;
-    if (idx !== undefined && editingTemplateItems[idx]) {
-      editingTemplateItems[idx].item_name = e.currentTarget.value;
-    }
-  }));
-  viewTemplateContent.querySelectorAll(".change-qty").forEach(el => el.addEventListener("input", (e) => {
-    const idx = e.currentTarget.dataset.index;
-    if (idx !== undefined && editingTemplateItems[idx]) {
-      editingTemplateItems[idx].quantity = parseInt(e.currentTarget.value) || 0;
-    }
-  }));
-  viewTemplateContent.querySelectorAll(".change-unit").forEach(el => el.addEventListener("input", (e) => {
-    const idx = e.currentTarget.dataset.index;
-    if (idx !== undefined && editingTemplateItems[idx]) {
-      editingTemplateItems[idx].unit = e.currentTarget.value;
-    }
-  }));
-  viewTemplateContent.querySelectorAll(".change-extra").forEach(el => el.addEventListener("input", (e) => {
-    const idx = e.currentTarget.dataset.index;
-    if (idx !== undefined && editingTemplateItems[idx]) {
-      editingTemplateItems[idx].extra_quantity_per_night = parseInt(e.currentTarget.value) || 0;
-    }
-  }));
-  // 2. 🔼 上に移動
-  viewTemplateContent.querySelectorAll(".btn-move-up").forEach(btn => btn.addEventListener("click", (e) => {
-    const idx = parseInt(e.currentTarget.dataset.index);
-    swapItems(idx, idx - 1);
-  }));
-
-  // 3. 🔽 下に移動
-  viewTemplateContent.querySelectorAll(".btn-move-down").forEach(btn => btn.addEventListener("click", (e) => {
-    const idx = parseInt(e.currentTarget.dataset.index);
-    swapItems(idx, idx + 1);
-  }));
-
-// ⭕ 【修正版】行削除のイベント（ここを差し替えてください）
-viewTemplateContent.querySelectorAll(".btn-master-del").forEach(btn => btn.addEventListener("click", (e) => {
-  // クリックされたのが中の <i> アイコンでも、確実にボタン側の data-index を取得する
-  const button = e.target.closest(".btn-master-del");
-  if (!button) return;
-  
-  const idx = parseInt(button.dataset.index);
-  
-  if (!isNaN(idx) && editingTemplateItems[idx] !== undefined) {
-    editingTemplateItems.splice(idx, 1); // 配列から確実に除去
-    renderTemplateEditForm(); // 再描画してインデックスを再割り当て
-  }
-}));
-
-  // 5. ➕ 持ち物の行追加
-  viewTemplateContent.querySelectorAll(".btn-master-add").forEach(btn => btn.addEventListener("click", (e) => {
-    const cat = e.currentTarget.dataset.category;
-    // 現在のカテゴリの最後のアイテムの位置を探して、そこに滑り込ませる
-    let insertIndex = editingTemplateItems.length;
-    for (let i = editingTemplateItems.length - 1; i >= 0; i--) {
-      if (editingTemplateItems[i].category === cat) {
-        insertIndex = i + 1;
-        break;
+      if (templates.length > 0) {
+        renderTemplateDetails(templates[0]);
       }
     }
-    editingTemplateItems.splice(insertIndex, 0, {
-      id: 'new_' + Date.now() + Math.random().toString(36).substr(2, 5), // バニラなテンポラリID
-      template_id: viewTemplateSelect.value,
-      category: cat,
-      item_name: '',
-      quantity: 1,
-      unit: '個',
-      extra_quantity_per_night: 0,
-      sort_order: insertIndex + 1
-    });
-    renderTemplateEditForm();
-  }));
-}
-
-// 配列の要素を入れ替える（並び替え）
-function swapItems(idx1, idx2) {
-  const temp = editingTemplateItems[idx1];
-  editingTemplateItems[idx1] = editingTemplateItems[idx2];
-  editingTemplateItems[idx2] = temp;
-  renderTemplateEditForm();
+  } catch (err) {
+    console.error("テンプレート一覧取得エラー:", err);
+  }
 }
 
 // ==========================================
-// 4. 現在有効なチェックリスト (`trip_list_items`) を取得して描画
+// 2. 現在の持ち物リストの取得（GASより）
 // ==========================================
 async function fetchCurrentList() {
-  // 🟢 1. 理想のカテゴリの並び順をここに定義します（左から順に優先されます）
-  const categoryOrder = ["琴晴", "穂香", "遥菜", "ママ", "パパ", "共通"];
+  try {
+    const res = await fetch(`${GAS_API_URL}?action=get_trip_list`);
+    const items = await res.json();
 
-  // Supabaseからはソート順（sort_order）をベースにデータを取得
-  const { data: items, error } = await supabaseClient
-    .from("trip_list_items")
-    .select("*")
-    .order("sort_order", { ascending: true })
-    .order("id", { ascending: true });
+    let fetchedItems = Array.isArray(items) ? items : [];
 
-  if (error) {
-    console.error("リスト取得エラー:", error);
-    return;
+    // 🟢 並び順設定：1. CATEGORY_ORDER順 ➔ 2. sort_order順
+    fetchedItems.sort((a, b) => {
+      let indexA = CATEGORY_ORDER.indexOf(a.category);
+      let indexB = CATEGORY_ORDER.indexOf(b.category);
+
+      if (indexA === -1) indexA = 999;
+      if (indexB === -1) indexB = 999;
+
+      if (indexA !== indexB) {
+        return indexA - indexB;
+      }
+      return (a.sort_order || 0) - (b.sort_order || 0);
+    });
+
+    currentItems = fetchedItems;
+    renderChecklist();
+    updateProgress();
+  } catch (err) {
+    console.error("リスト取得エラー:", err);
   }
-
-  let fetchedItems = items || [];
-
-  // 🟢 2. JavaScript側で categoryOrder の順番通りにカスタムソートを実行
-  fetchedItems.sort((a, b) => {
-    let indexA = categoryOrder.indexOf(a.category);
-    let indexB = categoryOrder.indexOf(b.category);
-
-    // もし定義していないカテゴリ（例:新しく追加した人など）があれば後ろに回す
-    if (indexA === -1) indexA = 999;
-    if (indexB === -1) indexB = 999;
-
-    if (indexA !== indexB) {
-      return indexA - indexB; // 1. カテゴリの並び順を最優先
-    }
-    return 0; // 2. 同じカテゴリ内なら、Supabaseから取得した sort_order 順を維持
-  });
-
-  currentItems = fetchedItems;
-  renderChecklist();
-  updateProgress();
 }
 
-
 // ==========================================
-// 5. マスターから計算して新規リストを生成（上書き）するロジック
+// 3. テンプレート選択から持ち物リストを新しく生成・合算
 // ==========================================
-
 async function generateListFromTemplates() {
-  const checkedBoxes = document.querySelectorAll('input[name="template-select"]:checked');
-  if (checkedBoxes.length === 0) {
-    alert("少なくとも1つのリストにチェックを入れてください！");
+  const selectedCheckboxes = document.querySelectorAll(".tpl-checkbox:checked");
+  const selectedTemplateNames = Array.from(selectedCheckboxes).map(cb => cb.value);
+
+  if (selectedTemplateNames.length === 0) {
+    alert("少なくとも1つのテンプレートを選択してください！");
     return;
   }
-  
-  const selectedTemplateIds = Array.from(checkedBoxes).map(box => box.value);
-  const selectedTemplateNames = Array.from(checkedBoxes).map(box => {
-    return box.nextElementSibling ? box.nextElementSibling.textContent.trim() : "不明なリスト";
-  });
 
   const nights = parseInt(stayNightsInput.value) || 1;
 
-  if (!confirm(`選択された要素と「${nights}泊」の条件で、現在のリストをリセットして新しく作り直します。よろしいですか？`)) {
-    return;
-  }
-
   btnGenerate.disabled = true;
-  btnGenerate.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin"></i> 生成中...`;
+  btnGenerate.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin"></i> スプレッドシートから生成中...`;
 
   try {
-    // ✨【修正】ここでも sort_order 順にマスターデータを取得します
-    const { data: masterItems, error: masterError } = await supabaseClient
-      .from("template_items")
-      .select("*")
-      .in("template_id", selectedTemplateIds)
-      .order("sort_order", { ascending: true }); // 並び順を維持して取得
+    // 選択されたテンプレートの全アイテムを並列取得
+    const fetchPromises = selectedTemplateNames.map(tplName =>
+      fetch(`${GAS_API_URL}?action=get_template_items&template=${encodeURIComponent(tplName)}`).then(r => r.json())
+    );
+    const results = await Promise.all(fetchPromises);
 
-    if (masterError) throw masterError;
-
-    if (!masterItems || masterItems.length === 0) {
-      alert("選ばれたテンプレートの中に持ち物データが見つかりませんでした。");
-      btnGenerate.disabled = false;
-      return;
-    }
-
-    // Mapを使って合算する際、最初に登場した順番（sort_order）を記憶できるようにします
     const mergedMap = new Map();
-    masterItems.forEach(item => {
-      const key = `${item.category}_${item.item_name}`;
-      const extraNights = nights - 1;
-      const computedQuantity = item.quantity + (item.extra_quantity_per_night * (extraNights > 0 ? extraNights : 0));
 
-      // 🟢【修正版】テンプレートの選択順（インデックス）を取得
-      const templateOrderIndex = selectedTemplateIds.indexOf(item.template_id);
-      // テンプレートごとに10000の重みをつけ、その中で本来のsort_orderを足すことで、テンプレート順➔sort_order順を1つの数値で表現
-      const combinedSortOrder = ((templateOrderIndex + 1) * 10000) + (item.sort_order || 0);
+    results.forEach((masterItems, tplIndex) => {
+      if (!Array.isArray(masterItems)) return;
 
-      if (mergedMap.has(key)) {
-        const existing = mergedMap.get(key);
-        existing.quantity += computedQuantity;
-        // 先に選んだテンプレートの順序（より小さい数値）を優先する
-        if (combinedSortOrder < existing.sort_order) {
-          existing.sort_order = combinedSortOrder;
+      masterItems.forEach(item => {
+        const key = `${item.category}_${item.item_name}`;
+        const extraNights = Math.max(0, nights - 1);
+        const computedQuantity = (Number(item.quantity) || 0) + ((Number(item.extra_quantity_per_night) || 0) * extraNights);
+
+        // 🟢 テンプレート順 ➔ sort_order 順の計算
+        const combinedSortOrder = ((tplIndex + 1) * 10000) + (Number(item.sort_order) || 0);
+
+        if (mergedMap.has(key)) {
+          const existing = mergedMap.get(key);
+          existing.quantity += computedQuantity;
+          if (combinedSortOrder < existing.sort_order) {
+            existing.sort_order = combinedSortOrder;
+          }
+        } else {
+          mergedMap.set(key, {
+            category: item.category || "共通",
+            item_name: item.item_name,
+            quantity: computedQuantity,
+            unit: item.unit || "個",
+            is_checked: false,
+            sort_order: combinedSortOrder
+          });
         }
-      } else {
-        mergedMap.set(key, {
-          category: item.category,
-          item_name: item.item_name,
-          quantity: computedQuantity,
-          unit: item.unit || "個",
-          is_checked: false,
-          sort_order: combinedSortOrder // 👈 計算した複合ソート順をセット
-        });
-      }
+      });
     });
 
-    // インサート用レコードの配列。JSのMapは挿入順が維持されるため、すでに綺麗に並んでいます。
-    const newRecordsToInsert = Array.from(mergedMap.values());
+    const newTripList = Array.from(mergedMap.values());
 
-    const { error: deleteError } = await supabaseClient
-      .from("trip_list_items")
-      .delete()
-      .gt("id", "00000000-0000-0000-0000-000000000000");
+    // GASに保存（trip_list_itemsシートの上書き）
+    const res = await fetch(GAS_API_URL, {
+      method: "POST",
+      body: JSON.stringify({
+        action: "save_trip_list",
+        items: newTripList
+      })
+    });
 
-    if (deleteError) throw deleteError;
+    const resData = await res.json();
+    if (resData.error) throw new Error(resData.error);
 
-    // ✨ 新しい trip_list_items に並び順情報付きで一括登録
-    // (※もし trip_list_items テーブルに sort_order 列がなくても、PostgreSQLはインサートされた順にデータを格納・返却する傾向がありますが、
-    //  Mapの配列順のまま一気にインサートされるため順番が維持されます)
-    const { error: insertError } = await supabaseClient
-      .from("trip_list_items")
-      .insert(newRecordsToInsert);
-
-    if (insertError) throw insertError;
-
-    // 条件テキストの表示処理
+    // 🟢 条件テキストを更新して表示（消えないように保護）
     const conditionContainer = document.getElementById("generated-condition-text");
-    if (conditionContainer) {
-      const templateListText = selectedTemplateNames.join(" ＋ ");
-      const daysText = nights === 1 && templateListText.includes("ピクニック") ? "日帰り" : `${nights}泊${nights + 1}日`;
-      
-      conditionContainer.innerHTML = `
-        <div class="flex items-start gap-1">
-          <i class="fa-solid fa-info-circle text-indigo-400 mt-0.5"></i>
-          <div>
-            <span class="font-bold text-slate-500">現在の作成条件:</span><br>
-            <span class="text-slate-600 font-semibold">${templateListText}</span> 
-            <span class="mx-1 text-slate-300">|</span> 
-            <span class="bg-indigo-50 text-indigo-600 px-1.5 py-0.2 rounded font-bold">${daysText}</span>
-          </div>
-        </div>
-      `;
+    const conditionDetails = document.getElementById("condition-details");
+    if (conditionContainer && conditionDetails) {
+      conditionDetails.textContent = `【条件】${selectedTemplateNames.join(" + ")}（${nights}泊 ${nights + 1}日）`;
       conditionContainer.classList.remove("hidden");
     }
 
     await fetchCurrentList();
 
   } catch (err) {
-    console.error("生成プロセス全体でエラー発生:", err);
-    alert("エラーが発生しました: " + (err.message || JSON.stringify(err)));
+    console.error("リスト生成エラー:", err);
+    alert("リスト作成に失敗しました: " + err.message);
   } finally {
     btnGenerate.disabled = false;
-    btnGenerate.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> この条件でリストを作成・上書き`;
+    btnGenerate.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> 選択した条件で持ち物リストを作成`;
   }
 }
 
 // ==========================================
-// 6. チェックのON/OFF切り替え
-// ==========================================
-async function toggleItemCheck(id, currentStatus) {
-  const { error } = await supabaseClient
-    .from("trip_list_items")
-    .update({ is_checked: !currentStatus })
-    .eq("id", id);
-
-  if (error) {
-    console.error("チェック更新エラー:", error);
-  }
-}
-
-// ==========================================
-// 7. 画面へのチェックリスト描画（個別追加機能付き）
+// 4. チェックリストのレンダリング
 // ==========================================
 function renderChecklist() {
   if (!listContainer) return;
@@ -558,329 +268,287 @@ function renderChecklist() {
         <p class="text-sm">上のパネルから条件を選んで<br>「リストを作成」ボタンを押してください！</p>
       </div>`;
     
-    // 🟢【追加】リストが完全に空のときだけ条件テキストを隠すようにする（初期状態用）
+    // 🟢 リストが完全空のときだけ条件文を非表示にする
     const conditionContainer = document.getElementById("generated-condition-text");
     if (conditionContainer) conditionContainer.classList.add("hidden");
     return;
   }
 
-// 🟢【修正版】スマホは1列、タブレットは2列、普通のPCは3列、大画面PCなら4列に可変するグリッド
-  listContainer.className = "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 space-y-0";
-  
-  // カテゴリ（誰）ごとにグループ化
+  // カテゴリごとにグループ化
   const grouped = {};
   currentItems.forEach(item => {
-    if (!grouped[item.category]) {
-      grouped[item.category] = [];
-    }
-    grouped[item.category].push(item);
+    const cat = item.category || "共通";
+    if (!grouped[cat]) grouped[cat] = [];
+    grouped[cat].push(item);
   });
 
+  listContainer.className = "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-start";
   listContainer.innerHTML = "";
 
-  for (const category in grouped) {
-    const categoryCard = document.createElement("div");
-    categoryCard.className = "bg-white rounded-2xl p-5 shadow-sm border border-slate-100 mb-4";
+  Object.keys(grouped).forEach(catName => {
+    const items = grouped[catName];
+    const catCard = document.createElement("div");
+    catCard.className = "bg-white rounded-2xl p-4 border border-slate-100 shadow-sm";
 
-    // --- カードヘッダー（追加ボタン付きに拡張） ---
-    const header = document.createElement("h3");
-    header.className = "text-md font-bold text-slate-800 mb-3 pb-1.5 border-b border-slate-100 flex justify-between items-center";
-    
-    const catItems = grouped[category];
-    const checkedCount = catItems.filter(i => i.is_checked).length;
-    
-    header.innerHTML = `
-      <div class="flex items-center gap-1.5">
-        <i class="fa-solid fa-user text-indigo-400 text-sm"></i>
-        <span>${category}</span>
-        <span class="text-[10px] bg-slate-100 text-slate-500 font-bold px-1.5 py-0.2 rounded-full ml-1">${checkedCount}/${catItems.length}</span>
+    let html = `
+      <div class="flex items-center justify-between mb-3 pb-2 border-b border-slate-100">
+        <h3 class="font-bold text-slate-700 flex items-center gap-2">
+          <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+          ${catName}
+        </h3>
+        <span class="text-xs font-semibold px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full">
+          ${items.filter(i => i.is_checked).length} / ${items.length}
+        </span>
       </div>
-      <button class="btn-add-item text-xs text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1 bg-indigo-50 hover:bg-indigo-100/70 px-2 py-1 rounded-lg transition cursor-pointer" data-category="${category}">
-        <i class="fa-solid fa-plus text-[10px]"></i>追加
-      </button>
+      <div class="space-y-1.5">
     `;
-    categoryCard.appendChild(header);
 
-    // --- 【重要】入力フォームを表示するためのコンテナエリア ---
-    const formContainer = document.createElement("div");
-    formContainer.className = "hidden mb-3 p-3 bg-slate-50 border border-slate-100 rounded-xl space-y-2";
-    formContainer.innerHTML = `
-      <div class="flex gap-2">
-        <input type="text" placeholder="持ち物名" class="input-name flex-1 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500">
-        <input type="number" value="1" min="1" class="input-qty w-14 px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-center text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500">
-        <input type="text" value="個" class="input-unit w-12 px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-center text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500">
-      </div>
-      <div class="flex justify-end gap-1.5">
-        <button class="btn-cancel-add text-[11px] font-bold text-slate-400 hover:text-slate-600 px-2 py-1">キャンセル</button>
-        <button class="btn-submit-add bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold px-2.5 py-1 rounded-md shadow-sm transition">保存</button>
-      </div>
-    `;
-    categoryCard.appendChild(formContainer);
+    items.forEach(item => {
+      html += `
+        <label class="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer group">
+          <div class="flex items-center gap-3">
+            <input type="checkbox" data-id="${item.id}" ${item.is_checked ? "checked" : ""} class="item-checkbox w-5 h-5 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500">
+            <span class="text-sm text-slate-700 group-hover:text-slate-900 ${item.is_checked ? "line-through text-slate-300" : ""}">${item.item_name}</span>
+          </div>
+          <span class="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-lg ${item.is_checked ? "opacity-40" : ""}">${item.quantity} ${item.unit || "個"}</span>
+        </label>
+      `;
+    });
 
-    // --- 持ち物一覧リスト ---
-    const itemsList = document.createElement("div");
-    itemsList.className = "space-y-3";
+    html += `</div>`;
+    catCard.innerHTML = html;
+    listContainer.appendChild(catCard);
+  });
 
-    catItems.forEach(item => {
-      const itemRow = document.createElement("div");
-      itemRow.className = "flex items-center justify-between py-1.5 px-1 hover:bg-slate-50 rounded-lg transition duration-150 group"; // 👈 group クラスを追加しておくと便利です
-      
-// 🟢 JavaScript側の renderChecklist() の中身を以下のように調整します
-  itemRow.innerHTML = `
-    <label class="flex items-center gap-3 cursor-pointer flex-1 select-none">
-      <input type="checkbox" ${item.is_checked ? "checked" : ""} class="checkbox-large rounded text-indigo-600 focus:ring-indigo-400 cursor-pointer">
-      <span class="text-sm font-medium ${item.is_checked ? 'text-slate-400 line-through' : 'text-slate-700'}">${item.item_name}</span>
-    </label>
-  
-    <div class="flex items-center gap-2">
-      <span class="text-xs font-bold ${item.is_checked ? 'text-slate-300' : 'text-slate-400'} bg-slate-50 border border-slate-100 px-2 py-1 rounded-md">
-        ${item.quantity} ${item.unit}
-      </span>
-      <button class="btn-delete-list-item text-slate-400 hover:text-red-500 p-1 transition cursor-pointer" data-id="${item.id}" title="この項目を削除">
-        <i class="fa-solid fa-trash text-xs"></i>
-      </button>
-    </div>
-  `;
-
-      // チェックボックスの変更イベント
-      const checkbox = itemRow.querySelector('input[type="checkbox"]');
-      if (checkbox) {
-        checkbox.addEventListener("change", () => toggleItemCheck(item.id, item.is_checked));
-      }
-
-      // ➕ 削除ボタンのクリックイベントを追加
-      const deleteBtn = itemRow.querySelector('.btn-delete-list-item');
-      if (deleteBtn) {
-        deleteBtn.addEventListener("click", (e) => {
-          const id = e.currentTarget.dataset.id;
-          deleteItemFromTripList(id, item.item_name);
+  // チェックボックスの変更イベント登録
+  listContainer.querySelectorAll(".item-checkbox").forEach(cb => {
+    cb.addEventListener("change", async (e) => {
+      const id = e.target.dataset.id;
+      const item = currentItems.find(i => String(i.id) === String(id));
+      if (item) {
+        item.is_checked = e.target.checked;
+        renderChecklist();
+        updateProgress();
+        
+        // 裏でGASに保存
+        await fetch(GAS_API_URL, {
+          method: "POST",
+          body: JSON.stringify({ action: "save_trip_list", items: currentItems })
         });
       }
-
-      itemsList.appendChild(itemRow);
     });
-    categoryCard.appendChild(itemsList);
-
-    // --- 追加ボタンとフォームの開閉イベントを仕込む ---
-    const btnAdd = categoryCard.querySelector(".btn-add-item");
-    const btnCancel = categoryCard.querySelector(".btn-cancel-add");
-    const btnSubmit = categoryCard.querySelector(".btn-submit-add");
-    
-    btnAdd.addEventListener("click", () => {
-      formContainer.classList.toggle("hidden");
-      if (!formContainer.classList.contains("hidden")) {
-        formContainer.querySelector(".input-name").focus();
-      }
-    });
-
-    btnCancel.addEventListener("click", () => {
-      formContainer.classList.add("hidden");
-    });
-
-    btnSubmit.addEventListener("click", () => {
-      addNewItemToTripList(category, formContainer);
-    });
-
-    listContainer.appendChild(categoryCard);
-  }
+  });
 }
 
-// ==========================================
-// 【新規追加】個別の持ち物を新しく trip_list_items へインサートする処理
-// ==========================================
-async function addNewItemToTripList(category, formContainer) {
-  const nameInput = formContainer.querySelector(".input-name");
-  const qtyInput = formContainer.querySelector(".input-qty");
-  const unitInput = formContainer.querySelector(".input-unit");
-  const btnSubmit = formContainer.querySelector(".btn-submit-add");
-
-  const itemName = nameInput.value.trim();
-  const quantity = parseInt(qtyInput.value) || 1;
-  const unit = unitInput.value.trim() || "個";
-
-  if (!itemName) {
-    alert("持ち物名を入力してください！");
-    nameInput.focus();
-    return;
-  }
-
-  btnSubmit.disabled = true;
-  btnSubmit.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin"></i>`;
-
-  const newRecord = {
-    category: category,
-    item_name: itemName,
-    quantity: quantity,
-    unit: unit,
-    is_checked: false
-  };
-
-  // 💡 もし trip_list_items に sort_order 列が存在している場合は、一番最後に並ぶように大きな値を入れておきます
-  // (なければ自動で無視される、または一応オブジェクトに含めておいても大丈夫です)
-  newRecord.sort_order = 9999;
-
-  const { error } = await supabaseClient
-    .from("trip_list_items")
-    .insert([newRecord]);
-
-  if (error) {
-    console.error("個別アイテムの追加失敗:", error);
-    alert("追加に失敗しました。");
-    btnSubmit.disabled = false;
-    btnSubmit.innerHTML = "保存";
-  } else {
-    // 成功したらフォームをクリアして隠す (リアルタイム同期で画面は自動更新されます)
-    nameInput.value = "";
-    qtyInput.value = "1";
-    unitInput.value = "個";
-    formContainer.classList.add("hidden");
-  }
-}
-
-
-// ==========================================
-// 【新規追加】個別の持ち物を trip_list_items から削除する処理
-// ==========================================
-async function deleteItemFromTripList(id, itemName) {
-  if (!id) return;
-  
-  // 誤操作防止の確認ダイアログ
-  if (!confirm(`「${itemName}」をこのリストから削除してもよろしいですか？`)) {
-    return;
-  }
-
-  const { error } = await supabaseClient
-    .from("trip_list_items")
-    .delete()
-    .eq("id", id);
-
-  if (error) {
-    console.error("個別アイテムの削除失敗:", error);
-    alert("削除に失敗しました。");
-  } else {
-    // 💡 成功時はリアルタイム同期（setupRealtimeSubscription）によって
-    // 自動的に最新のリストが再取得（fetchCurrentList）され、画面が更新されます。
-    console.log(`削除完了: ${itemName} (${id})`);
-  }
-}
-
-
-// ==========================================
-// 8. 進捗バーの更新
-// ==========================================
+// 進捗バーの更新
 function updateProgress() {
-  if (!progressBar || !progressText) return;
-
   if (currentItems.length === 0) {
-    progressBar.style.width = "0%";
-    progressText.textContent = "0%";
+    if (progressText) progressText.textContent = "0%";
+    if (progressBar) progressBar.style.width = "0%";
+    return;
+  }
+  const checkedCount = currentItems.filter(i => i.is_checked).length;
+  const percent = Math.round((checkedCount / currentItems.length) * 100);
+  if (progressText) progressText.textContent = `${percent}%`;
+  if (progressBar) progressBar.style.width = `${percent}%`;
+}
+
+// ==========================================
+// 5. マスターテンプレート詳細の確認・編集フォーム描画
+// ==========================================
+async function renderTemplateDetails(templateName) {
+  if (!viewTemplateContent) return;
+
+  viewTemplateContent.innerHTML = `<div class="p-8 text-center text-slate-400"><i class="fa-solid fa-circle-notch animate-spin text-2xl"></i> スプレッドシートを読み込み中...</div>`;
+
+  try {
+    const res = await fetch(`${GAS_API_URL}?action=get_template_items&template=${encodeURIComponent(templateName)}`);
+    const items = await res.json();
+
+    editingTemplateItems = Array.isArray(items) ? items : [];
+
+    renderTemplateEditForm();
+  } catch (err) {
+    console.error("テンプレート詳細取得エラー:", err);
+    viewTemplateContent.innerHTML = `<div class="p-4 text-red-500 text-center">データの取得に失敗しました</div>`;
+  }
+}
+
+function renderTemplateEditForm() {
+  if (editingTemplateItems.length === 0) {
+    viewTemplateContent.innerHTML = `
+      <div class="p-8 text-center text-slate-400">
+        項目がありません。「持物追加」ボタンで登録を開始してください。
+      </div>`;
     return;
   }
 
-  const checkedCount = currentItems.filter(item => item.is_checked).length;
-  const percent = Math.round((checkedCount / currentItems.length) * 100);
+  // カテゴリごとにグループ化
+  const grouped = {};
+  editingTemplateItems.forEach((item, index) => {
+    item.originalIndex = index; // 最新のインデックスを保持
+    const cat = item.category || "共通";
+    if (!grouped[cat]) grouped[cat] = [];
+    grouped[cat].push(item);
+  });
 
-  progressBar.style.width = `${percent}%`;
-  progressText.textContent = `${percent}%`;
+  let html = `<div class="space-y-6">`;
+
+  Object.keys(grouped).forEach(catName => {
+    const items = grouped[catName];
+    html += `
+      <div class="bg-slate-50 p-4 rounded-xl border border-slate-200/60">
+        <div class="flex justify-between items-center mb-3">
+          <h4 class="font-bold text-slate-700 text-sm flex items-center gap-2">
+            <i class="fa-solid fa-folder text-emerald-500"></i> ${catName}
+          </h4>
+          <button type="button" class="btn-master-add text-xs bg-emerald-100 hover:bg-emerald-200 text-emerald-700 font-bold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1" data-category="${catName}">
+            <i class="fa-solid fa-plus"></i> 持物追加
+          </button>
+        </div>
+        <div class="space-y-2">
+    `;
+
+    items.forEach(item => {
+      const idx = item.originalIndex;
+      html += `
+        <div class="flex flex-wrap md:flex-nowrap items-center gap-2 bg-white p-2.5 rounded-lg border border-slate-200 shadow-sm">
+          <input type="text" value="${item.item_name || ''}" placeholder="持ち物名" class="change-name flex-1 min-w-[120px] px-2.5 py-1.5 text-sm border border-slate-200 rounded-md focus:ring-1 focus:ring-emerald-500" data-index="${idx}">
+          <div class="flex items-center gap-1">
+            <span class="text-xs text-slate-400">基本</span>
+            <input type="number" value="${item.quantity}" min="0" class="change-qty w-16 px-2 py-1.5 text-sm border border-slate-200 rounded-md focus:ring-1 focus:ring-emerald-500 text-center" data-index="${idx}">
+          </div>
+          <input type="text" value="${item.unit || '個'}" placeholder="単位" class="change-unit w-16 px-2 py-1.5 text-sm border border-slate-200 rounded-md focus:ring-1 focus:ring-emerald-500 text-center" data-index="${idx}">
+          <div class="flex items-center gap-1">
+            <span class="text-xs text-slate-400">+1泊</span>
+            <input type="number" value="${item.extra_quantity_per_night || 0}" min="0" class="change-extra w-16 px-2 py-1.5 text-sm border border-slate-200 rounded-md focus:ring-1 focus:ring-emerald-500 text-center" data-index="${idx}">
+          </div>
+          <button type="button" class="btn-master-delete text-slate-300 hover:text-rose-500 p-1.5 transition-colors" data-index="${idx}">
+            <i class="fa-solid fa-trash-can"></i>
+          </button>
+        </div>
+      `;
+    });
+
+    html += `</div></div>`;
+  });
+
+  html += `</div>`;
+  viewTemplateContent.innerHTML = html;
+
+  setupFormEventListeners();
+}
+
+function setupFormEventListeners() {
+  // 文字・数値入力を配列と即座に同期
+  viewTemplateContent.querySelectorAll(".change-name").forEach(el => el.addEventListener("input", (e) => {
+    const idx = e.currentTarget.dataset.index;
+    if (idx !== undefined && editingTemplateItems[idx]) editingTemplateItems[idx].item_name = e.currentTarget.value;
+  }));
+  viewTemplateContent.querySelectorAll(".change-qty").forEach(el => el.addEventListener("input", (e) => {
+    const idx = e.currentTarget.dataset.index;
+    if (idx !== undefined && editingTemplateItems[idx]) editingTemplateItems[idx].quantity = parseInt(e.currentTarget.value) || 0;
+  }));
+  viewTemplateContent.querySelectorAll(".change-unit").forEach(el => el.addEventListener("input", (e) => {
+    const idx = e.currentTarget.dataset.index;
+    if (idx !== undefined && editingTemplateItems[idx]) editingTemplateItems[idx].unit = e.currentTarget.value;
+  }));
+  viewTemplateContent.querySelectorAll(".change-extra").forEach(el => el.addEventListener("input", (e) => {
+    const idx = e.currentTarget.dataset.index;
+    if (idx !== undefined && editingTemplateItems[idx]) editingTemplateItems[idx].extra_quantity_per_night = parseInt(e.currentTarget.value) || 0;
+  }));
+
+  // 個別削除ボタン
+  viewTemplateContent.querySelectorAll(".btn-master-delete").forEach(el => el.addEventListener("click", (e) => {
+    const idx = e.currentTarget.dataset.index;
+    if (idx !== undefined) {
+      editingTemplateItems.splice(idx, 1);
+      renderTemplateEditForm();
+    }
+  }));
+
+  // 持物追加ボタン
+  viewTemplateContent.querySelectorAll(".btn-master-add").forEach(el => el.addEventListener("click", (e) => {
+    const cat = e.currentTarget.dataset.category;
+    editingTemplateItems.push({
+      category: cat,
+      item_name: "",
+      quantity: 1,
+      unit: "個",
+      extra_quantity_per_night: 0
+    });
+    renderTemplateEditForm();
+  }));
+}
+
+// 新規カテゴリ追加
+function addNewCategoryToTemplate() {
+  const catName = prompt("新しいカテゴリ（家族名など）を入力してください:", "共通");
+  if (!catName || !catName.trim()) return;
+
+  editingTemplateItems.push({
+    category: catName.trim(),
+    item_name: "",
+    quantity: 1,
+    unit: "個",
+    extra_quantity_per_night: 0
+  });
+  renderTemplateEditForm();
 }
 
 // ==========================================
-// 9. リアルタイム同期設定
-// ==========================================
-function setupRealtimeSubscription() {
-  supabaseClient
-    .channel("public:trip_list_items")
-    .on("postgres_changes", { event: "*", pattern: "public", table: "trip_list_items" }, () => {
-      fetchCurrentList();
-    })
-    .subscribe();
-}
-
-// ==========================================
-// 【安全・差分削除版】削除されたアイテムだけを狙い撃ちでdeleteし、残りはupsert
+// 6. スプレッドシートへ一括保存処理
 // ==========================================
 async function saveTemplateMaster() {
   const selectEl = document.getElementById("view-template-select");
-  const templateId = selectEl ? selectEl.value : null;
+  const templateName = selectEl ? selectEl.value : null;
   const btn = document.getElementById("btn-save-template");
-  
-  if (!templateId) {
+
+  if (!templateName) {
     alert("編集対象のテンプレートが正しく選択されていません。");
     return;
   }
 
-  // 空欄の行は自動的に除外（これらが保存・維持対象）
+  // 空欄の行を安全に自動除外
   const validItems = editingTemplateItems.filter(item => item.item_name && item.item_name.trim());
-  
+
+  if (validItems.length === 0) {
+    alert("保存する持ち物項目がありません。");
+    return;
+  }
+
   if (btn) {
     btn.disabled = true;
-    btn.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin"></i> マスターデータを保存中...`;
+    btn.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin"></i> スプレッドシートへ保存中...`;
   }
 
   try {
-    // --- 1. 削除された項目だけを特定してピンポイントでDELETE ---
-    // 現在DBに登録されている最新データを一度取得する
-    const { data: dbItems, error: fetchError } = await supabaseClient
-      .from("template_items")
-      .select("id")
-      .eq("template_id", templateId);
+    const payload = {
+      action: "save_template",
+      template: templateName,
+      items: validItems.map(item => ({
+        category: item.category || "共通",
+        item_name: item.item_name.trim(),
+        quantity: Number(item.quantity) || 0,
+        unit: item.unit || "個",
+        extra_quantity_per_night: Number(item.extra_quantity_per_night) || 0
+      }))
+    };
 
-    if (fetchError) throw fetchError;
+    const res = await fetch(GAS_API_URL, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
 
-    if (dbItems && dbItems.length > 0) {
-      // 画面に残っている有効なアイテムのIDリスト（新規追加の 'new_' は除く）
-      const remainingIds = validItems
-        .map(item => item.id)
-        .filter(id => id && !id.toString().startsWith('new_'));
+    const result = await res.json();
+    if (result.error) throw new Error(result.error);
 
-      // 「DBにはあるが、画面の残りリストにはないID」＝ 削除ボタンが押されたID
-      const idsToDelete = dbItems
-        .map(dbItem => dbItem.id)
-        .filter(dbId => !remainingIds.includes(dbId));
+    alert("🎉 スプレッドシート（" + templateName + " シート）へ正常に保存しました！");
 
-      // 差分（削除対象）があれば、そのIDだけをピンポイントで消す
-      if (idsToDelete.length > 0) {
-        const { error: deleteError } = await supabaseClient
-          .from("template_items")
-          .delete()
-          .in("id", idsToDelete); // 👈 対象のIDだけを指定して削除
-
-        if (deleteError) throw deleteError;
-        console.log(`削除完了したID:`, idsToDelete);
-      }
-    }
-
-    // --- 2. 残った項目・新しく追加された項目をUPSERT（上書き・挿入） ---
-    if (validItems.length > 0) {
-      const recordsToUpsert = validItems.map((item, index) => {
-        const isNew = !item.id || item.id.toString().startsWith('new_');
-        return {
-          id: isNew ? crypto.randomUUID() : item.id, // 新規なら新しいUUID、既存なら元のID
-          template_id: templateId,
-          category: item.category,
-          item_name: item.item_name.trim(),
-          quantity: item.quantity,
-          unit: item.unit,
-          extra_quantity_per_night: item.extra_quantity_per_night,
-          sort_order: index + 1 // 現在の並び順で連番を再割り当て
-        };
-      });
-
-      const { error: upsertError } = await supabaseClient
-        .from("template_items")
-        .upsert(recordsToUpsert, { onConflict: 'id' });
-
-      if (upsertError) throw upsertError;
-    }
-
-    alert("🎉 テンプレートの変更を安全に保存しました！");
-    
-    // 最新状態に同期
-    await renderTemplateDetails(templateId);
-    await loadTemplates();
+    await renderTemplateDetails(templateName);
 
   } catch (err) {
-    console.error("マスター保存エラー:", err);
+    console.error("スプレッドシート保存エラー:", err);
     alert("保存に失敗しました: " + (err.message || JSON.stringify(err)));
   } finally {
     if (btn) {
