@@ -60,6 +60,57 @@ document.addEventListener("DOMContentLoaded", async () => {
       if (stayDaysText) stayDaysText.textContent = nights + 1;
     });
   }
+  // 個別アイテム追加ボタンのイベント設定
+  const btnAddSingle = document.getElementById("btn-add-single-item");
+  if (btnAddSingle) {
+    btnAddSingle.addEventListener("click", addSingleItemToList);
+  }
+
+  // 個別に持ち物をリストに追加する関数
+async function addSingleItemToList() {
+  const catEl = document.getElementById("add-item-category");
+  const nameEl = document.getElementById("add-item-name");
+  const qtyEl = document.getElementById("add-item-qty");
+  const unitEl = document.getElementById("add-item-unit");
+
+  const category = catEl ? catEl.value : "共通";
+  const itemName = nameEl ? nameEl.value.trim() : "";
+  const quantity = qtyEl ? parseInt(qtyEl.value) || 1 : 1;
+  const unit = unitEl ? unitEl.value.trim() || "個" : "個";
+
+  if (!itemName) {
+    alert("持ち物名を入力してください！");
+    return;
+  }
+
+  // 新規アイテムオブジェクト
+  const newItem = {
+    id: "manual_" + Date.now(),
+    category: category,
+    item_name: itemName,
+    quantity: quantity,
+    unit: unit,
+    is_checked: false,
+    sort_order: 99999
+  };
+
+  currentItems.push(newItem);
+  renderChecklist();
+  updateProgress();
+
+  // 入力欄をクリア
+  if (nameEl) nameEl.value = "";
+
+  // GAS（スプレッドシート）へ保存
+  try {
+    await fetch(GAS_API_URL, {
+      method: "POST",
+      body: JSON.stringify({ action: "save_trip_list", items: currentItems })
+    });
+  } catch (err) {
+    console.error("個別追加保存エラー:", err);
+  }
+}
 
   // タブイベントの設定
   setupTabEvents();
@@ -282,6 +333,7 @@ async function generateListFromTemplates() {
 // 4. チェックリスト描画
 // ==========================================
 function renderChecklist() {
+  const listContainer = document.getElementById("list-container");
   if (!listContainer) return;
 
   if (currentItems.length === 0) {
@@ -289,7 +341,7 @@ function renderChecklist() {
     listContainer.innerHTML = `
       <div class="bg-white rounded-2xl p-8 text-center border border-slate-100 text-slate-400 shadow-sm">
         <i class="fa-solid fa-clipboard-list text-3xl mb-2 text-slate-300"></i>
-        <p class="text-sm">上のパネルから条件を選んで<br>「リストを作成」ボタンを押してください！</p>
+        <p class="text-sm">上のパネルから条件を選んで<br>「リストを作成」ボタンを押すか、持ち物を個別追加してください！</p>
       </div>`;
     const conditionContainer = document.getElementById("generated-condition-text");
     if (conditionContainer) conditionContainer.classList.add("hidden");
@@ -326,13 +378,18 @@ function renderChecklist() {
 
     items.forEach(item => {
       html += `
-        <label class="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer group">
-          <div class="flex items-center gap-3">
-            <input type="checkbox" data-id="${item.id}" ${item.is_checked ? "checked" : ""} class="item-checkbox w-5 h-5 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500">
-            <span class="text-sm text-slate-700 group-hover:text-slate-900 ${item.is_checked ? "line-through text-slate-300" : ""}">${item.item_name}</span>
+        <div class="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 transition-colors group">
+          <label class="flex items-center gap-3 cursor-pointer flex-1 min-w-0 pr-2">
+            <input type="checkbox" data-id="${item.id}" ${item.is_checked ? "checked" : ""} class="item-checkbox w-5 h-5 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500 shrink-0">
+            <span class="text-sm text-slate-700 group-hover:text-slate-900 truncate ${item.is_checked ? "line-through text-slate-300" : ""}">${item.item_name}</span>
+          </label>
+          <div class="flex items-center gap-2 shrink-0">
+            <span class="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-lg ${item.is_checked ? "opacity-40" : ""}">${item.quantity} ${item.unit || "個"}</span>
+            <button type="button" data-id="${item.id}" class="btn-delete-list-item text-slate-300 hover:text-rose-500 p-1 transition-colors">
+              <i class="fa-solid fa-trash-can text-xs"></i>
+            </button>
           </div>
-          <span class="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-lg ${item.is_checked ? "opacity-40" : ""}">${item.quantity} ${item.unit || "個"}</span>
-        </label>
+        </div>
       `;
     });
 
@@ -341,6 +398,7 @@ function renderChecklist() {
     listContainer.appendChild(catCard);
   });
 
+  // チェックボックスの更新処理
   listContainer.querySelectorAll(".item-checkbox").forEach(cb => {
     cb.addEventListener("change", async (e) => {
       const id = e.target.dataset.id;
@@ -357,8 +415,22 @@ function renderChecklist() {
       }
     });
   });
-}
 
+  // 個別削除ボタンの処理
+  listContainer.querySelectorAll(".btn-delete-list-item").forEach(btn => {
+    btn.addEventListener("click", async (e) => {
+      const id = e.currentTarget.dataset.id;
+      currentItems = currentItems.filter(i => String(i.id) !== String(id));
+      renderChecklist();
+      updateProgress();
+
+      await fetch(GAS_API_URL, {
+        method: "POST",
+        body: JSON.stringify({ action: "save_trip_list", items: currentItems })
+      });
+    });
+  });
+}
 function updateProgress() {
   if (currentItems.length === 0) {
     if (progressText) progressText.textContent = "0%";
