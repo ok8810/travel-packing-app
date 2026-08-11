@@ -103,13 +103,18 @@ function setupTabEvents() {
 // ==========================================
 async function loadTemplates() {
   try {
-    const res = await fetch(`${GAS_API_URL}?action=get_templates`);
-    const textData = await res.text(); // 一旦テキストとして取得
-    templates = JSON.parse(textData);  // 安全にJSONパース
+    // 🟢 redirect: "follow" を追加してGASのリダイレクトを確実に追跡
+    const res = await fetch(`${GAS_API_URL}?action=get_templates`, {
+      method: "GET",
+      redirect: "follow"
+    });
+    
+    const textData = await res.text();
+    templates = JSON.parse(textData);
 
     if (!Array.isArray(templates)) templates = [];
 
-    // 作成用チェックボックスのレンダリング
+    // 作成用チェックボックスの描画
     if (templateCheckboxes) {
       templateCheckboxes.innerHTML = templates.map((tplName, idx) => `
         <label class="flex items-center gap-2 p-3 bg-slate-50 rounded-xl border border-slate-100 hover:bg-emerald-50 hover:border-emerald-200 transition-all cursor-pointer">
@@ -119,7 +124,7 @@ async function loadTemplates() {
       `).join("");
     }
 
-    // マスター確認用ドロップダウンのレンダリング
+    // マスター確認用ドロップダウンの描画
     if (viewTemplateSelect) {
       viewTemplateSelect.innerHTML = templates.map(tplName => `
         <option value="${tplName}">${tplName}</option>
@@ -139,12 +144,15 @@ async function loadTemplates() {
 // ==========================================
 async function fetchCurrentList() {
   try {
-    const res = await fetch(`${GAS_API_URL}?action=get_trip_list`);
-    const items = await res.json();
+    const res = await fetch(`${GAS_API_URL}?action=get_trip_list`, {
+      method: "GET",
+      redirect: "follow"
+    });
+    const textData = await res.text();
+    const items = JSON.parse(textData);
 
     let fetchedItems = Array.isArray(items) ? items : [];
 
-    // 🟢 並び順設定：1. CATEGORY_ORDER順 ➔ 2. sort_order順
     fetchedItems.sort((a, b) => {
       let indexA = CATEGORY_ORDER.indexOf(a.category);
       let indexB = CATEGORY_ORDER.indexOf(b.category);
@@ -165,7 +173,6 @@ async function fetchCurrentList() {
     console.error("リスト取得エラー:", err);
   }
 }
-
 // ==========================================
 // 3. テンプレート選択から持ち物リストを新しく生成・合算
 // ==========================================
@@ -363,8 +370,12 @@ async function renderTemplateDetails(templateName) {
   viewTemplateContent.innerHTML = `<div class="p-8 text-center text-slate-400"><i class="fa-solid fa-circle-notch animate-spin text-2xl"></i> スプレッドシートを読み込み中...</div>`;
 
   try {
-    const res = await fetch(`${GAS_API_URL}?action=get_template_items&template=${encodeURIComponent(templateName)}`);
-    const items = await res.json();
+    const res = await fetch(`${GAS_API_URL}?action=get_template_items&template=${encodeURIComponent(templateName)}`, {
+      method: "GET",
+      redirect: "follow"
+    });
+    const textData = await res.text();
+    const items = JSON.parse(textData);
 
     editingTemplateItems = Array.isArray(items) ? items : [];
 
