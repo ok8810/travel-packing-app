@@ -9,7 +9,7 @@ let currentItems = [];         // 現在の旅行持ち物リスト
 let editingTemplateItems = []; // 編集中のマスターテンプレート項目
 
 // 🟢 優先させたいカテゴリ（家族）の並び順（お好みに合わせて並び替えてください）
-const CATEGORY_ORDER = ["共通", "パパ", "ママ", "琴晴", "長女", "次女", "三女"];
+const CATEGORY_ORDER = ["琴晴", "穂香", "遥菜", "ママ", "パパ", "共通"];
 
 // DOM要素の取得
 const templateCheckboxes = document.getElementById("template-checkboxes");
