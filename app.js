@@ -8,10 +8,10 @@ let templates = [];
 let currentItems = [];
 let editingTemplateItems = [];
 
-const CATEGORY_ORDER = ["共通", "パパ", "ママ", "琴晴", "長女", "次女", "三女"];
+const CATEGORY_ORDER = ["琴晴", "穂香", "遥菜", "ママ", "パパ", "共通"];
 
-// DOM要素の取得
-const templateCheckboxes = document.getElementById("template-checkboxes");
+// DOM要素の取得（両方のIDパターンに対応）
+const templateCheckboxes = document.getElementById("template-checkboxes") || document.getElementById("template-list");
 const stayNightsInput = document.getElementById("stay-nights");
 const stayDaysText = document.getElementById("stay-days");
 const btnGenerate = document.getElementById("btn-generate");
@@ -23,11 +23,11 @@ const viewTemplateContent = document.getElementById("view-template-content");
 const btnSaveTemplate = document.getElementById("btn-save-template");
 const btnAddCategory = document.getElementById("btn-add-category");
 
+// ==========================================
+// 初期化処理
+// ==========================================
 document.addEventListener("DOMContentLoaded", async () => {
   console.log("持ち物アプリ: GAS連携モード起動");
-
-  // 🔍 要素チェック
-  console.log("templateCheckboxes要素:", templateCheckboxes);
 
   if (stayNightsInput) {
     stayNightsInput.addEventListener("input", () => {
@@ -36,74 +36,76 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
-  console.log("STEP 1: タブイベント設定開始");
+  // タブイベントの設定
   setupTabEvents();
 
-  console.log("STEP 2: イベント設定完了。テンプレート読み込み呼び出し直前");
-  
-  try {
-    await loadTemplates();
-    console.log("STEP 3: loadTemplates完了");
-  } catch (e) {
-    console.error("loadTemplates実行中例外:", e);
+  if (btnSaveTemplate) {
+    btnSaveTemplate.addEventListener("click", saveTemplateMaster);
   }
 
-  try {
-    await fetchCurrentList();
-    console.log("STEP 4: fetchCurrentList完了");
-  } catch (e) {
-    console.error("fetchCurrentList実行中例外:", e);
+  if (btnAddCategory) {
+    btnAddCategory.addEventListener("click", addNewCategoryToTemplate);
   }
+
+  if (viewTemplateSelect) {
+    viewTemplateSelect.addEventListener("change", (e) => {
+      renderTemplateDetails(e.target.value);
+    });
+  }
+
+  if (btnGenerate) {
+    btnGenerate.addEventListener("click", generateListFromTemplates);
+  }
+
+  // データ読み込みの実行
+  await loadTemplates();
+  await fetchCurrentList();
 });
 
-async function loadTemplates() {
-  console.log("loadTemplates関数が実行されました");
-  try {
-    const url = `${GAS_API_URL}?action=get_templates`;
-    console.log("リクエスト送信先:", url);
-    const res = await fetch(url);
-    console.log("レスポンスステータス:", res.status);
-    
-    const textData = await res.text();
-    console.log("取得した生データ:", textData);
-    
-    templates = JSON.parse(textData);
-    console.log("パース後データ:", templates);
+// ==========================================
+// タブ切り替え処理（エラー回避のため定義を統合）
+// ==========================================
+function setupTabEvents() {
+  const tabGenerate = document.getElementById("tab-generate");
+  const tabMaster = document.getElementById("tab-master");
+  const panelGenerate = document.getElementById("panel-generate");
+  const panelMaster = document.getElementById("panel-master");
 
-    if (templateCheckboxes) {
-      templateCheckboxes.innerHTML = templates.map((tplName, idx) => `
-        <label class="flex items-center gap-2 p-3 bg-slate-50 rounded-xl border border-slate-100 hover:bg-emerald-50 hover:border-emerald-200 transition-all cursor-pointer">
-          <input type="checkbox" value="${tplName}" class="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500 tpl-checkbox" ${idx === 0 ? 'checked' : ''}>
-          <span class="text-sm font-medium text-slate-700">${tplName}</span>
-        </label>
-      `).join("");
-      console.log("チェックボックス描画完了");
-    } else {
-      console.warn("templateCheckboxes 要素（#template-checkboxes）が見つかりません！");
+  if (!tabGenerate || !tabMaster) return;
+
+  tabGenerate.addEventListener("click", () => {
+    tabGenerate.className = "flex-1 py-3 px-4 text-center font-bold border-b-2 border-emerald-500 text-emerald-600 bg-emerald-50/50";
+    tabMaster.className = "flex-1 py-3 px-4 text-center font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600";
+    if (panelGenerate) panelGenerate.classList.remove("hidden");
+    if (panelMaster) panelMaster.classList.add("hidden");
+  });
+
+  tabMaster.addEventListener("click", () => {
+    tabMaster.className = "flex-1 py-3 px-4 text-center font-bold border-b-2 border-emerald-500 text-emerald-600 bg-emerald-50/50";
+    tabGenerate.className = "flex-1 py-3 px-4 text-center font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600";
+    if (panelMaster) panelMaster.classList.remove("hidden");
+    if (panelGenerate) panelGenerate.classList.add("hidden");
+
+    if (viewTemplateSelect && viewTemplateSelect.value) {
+      renderTemplateDetails(viewTemplateSelect.value);
     }
-  } catch (err) {
-    console.error("loadTemplates内でエラー発生:", err);
-  }
+  });
 }
+
 // ==========================================
-// 1. スプレッドシートからテンプレート（シート一覧）取得
+// 1. スプレッドシートからテンプレート取得
 // ==========================================
 async function loadTemplates() {
   try {
-    // 🟢 redirect: "follow" を追加してGASのリダイレクトを確実に追跡
-    const res = await fetch(`${GAS_API_URL}?action=get_templates`, {
-      method: "GET",
-      redirect: "follow"
-    });
-    
+    const res = await fetch(`${GAS_API_URL}?action=get_templates`, { redirect: "follow" });
     const textData = await res.text();
     templates = JSON.parse(textData);
 
     if (!Array.isArray(templates)) templates = [];
 
-    // 作成用チェックボックスの描画
-    if (templateCheckboxes) {
-      templateCheckboxes.innerHTML = templates.map((tplName, idx) => `
+    const targetEl = document.getElementById("template-checkboxes") || document.getElementById("template-list");
+    if (targetEl) {
+      targetEl.innerHTML = templates.map((tplName, idx) => `
         <label class="flex items-center gap-2 p-3 bg-slate-50 rounded-xl border border-slate-100 hover:bg-emerald-50 hover:border-emerald-200 transition-all cursor-pointer">
           <input type="checkbox" value="${tplName}" class="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500 tpl-checkbox" ${idx === 0 ? 'checked' : ''}>
           <span class="text-sm font-medium text-slate-700">${tplName}</span>
@@ -111,7 +113,6 @@ async function loadTemplates() {
       `).join("");
     }
 
-    // マスター確認用ドロップダウンの描画
     if (viewTemplateSelect) {
       viewTemplateSelect.innerHTML = templates.map(tplName => `
         <option value="${tplName}">${tplName}</option>
@@ -127,14 +128,11 @@ async function loadTemplates() {
 }
 
 // ==========================================
-// 2. 現在の持ち物リストの取得（GASより）
+// 2. 現在の持ち物リストの取得
 // ==========================================
 async function fetchCurrentList() {
   try {
-    const res = await fetch(`${GAS_API_URL}?action=get_trip_list`, {
-      method: "GET",
-      redirect: "follow"
-    });
+    const res = await fetch(`${GAS_API_URL}?action=get_trip_list`, { redirect: "follow" });
     const textData = await res.text();
     const items = JSON.parse(textData);
 
@@ -160,8 +158,9 @@ async function fetchCurrentList() {
     console.error("リスト取得エラー:", err);
   }
 }
+
 // ==========================================
-// 3. テンプレート選択から持ち物リストを新しく生成・合算
+// 3. テンプレートから持ち物リスト作成
 // ==========================================
 async function generateListFromTemplates() {
   const selectedCheckboxes = document.querySelectorAll(".tpl-checkbox:checked");
@@ -172,15 +171,16 @@ async function generateListFromTemplates() {
     return;
   }
 
-  const nights = parseInt(stayNightsInput.value) || 1;
+  const nights = parseInt(stayNightsInput ? stayNightsInput.value : 1) || 1;
 
-  btnGenerate.disabled = true;
-  btnGenerate.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin"></i> スプレッドシートから生成中...`;
+  if (btnGenerate) {
+    btnGenerate.disabled = true;
+    btnGenerate.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin"></i> スプレッドシートから生成中...`;
+  }
 
   try {
-    // 選択されたテンプレートの全アイテムを並列取得
     const fetchPromises = selectedTemplateNames.map(tplName =>
-      fetch(`${GAS_API_URL}?action=get_template_items&template=${encodeURIComponent(tplName)}`).then(r => r.json())
+      fetch(`${GAS_API_URL}?action=get_template_items&template=${encodeURIComponent(tplName)}`, { redirect: "follow" }).then(r => r.text()).then(t => JSON.parse(t))
     );
     const results = await Promise.all(fetchPromises);
 
@@ -193,8 +193,6 @@ async function generateListFromTemplates() {
         const key = `${item.category}_${item.item_name}`;
         const extraNights = Math.max(0, nights - 1);
         const computedQuantity = (Number(item.quantity) || 0) + ((Number(item.extra_quantity_per_night) || 0) * extraNights);
-
-        // 🟢 テンプレート順 ➔ sort_order 順の計算
         const combinedSortOrder = ((tplIndex + 1) * 10000) + (Number(item.sort_order) || 0);
 
         if (mergedMap.has(key)) {
@@ -218,19 +216,14 @@ async function generateListFromTemplates() {
 
     const newTripList = Array.from(mergedMap.values());
 
-    // GASに保存（trip_list_itemsシートの上書き）
     const res = await fetch(GAS_API_URL, {
       method: "POST",
-      body: JSON.stringify({
-        action: "save_trip_list",
-        items: newTripList
-      })
+      body: JSON.stringify({ action: "save_trip_list", items: newTripList })
     });
 
     const resData = await res.json();
     if (resData.error) throw new Error(resData.error);
 
-    // 🟢 条件テキストを更新して表示（消えないように保護）
     const conditionContainer = document.getElementById("generated-condition-text");
     const conditionDetails = document.getElementById("condition-details");
     if (conditionContainer && conditionDetails) {
@@ -244,13 +237,15 @@ async function generateListFromTemplates() {
     console.error("リスト生成エラー:", err);
     alert("リスト作成に失敗しました: " + err.message);
   } finally {
-    btnGenerate.disabled = false;
-    btnGenerate.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> 選択した条件で持ち物リストを作成`;
+    if (btnGenerate) {
+      btnGenerate.disabled = false;
+      btnGenerate.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> 選択した条件で持ち物リストを作成`;
+    }
   }
 }
 
 // ==========================================
-// 4. チェックリストのレンダリング
+// 4. チェックリスト描画
 // ==========================================
 function renderChecklist() {
   if (!listContainer) return;
@@ -262,14 +257,11 @@ function renderChecklist() {
         <i class="fa-solid fa-clipboard-list text-3xl mb-2 text-slate-300"></i>
         <p class="text-sm">上のパネルから条件を選んで<br>「リストを作成」ボタンを押してください！</p>
       </div>`;
-    
-    // 🟢 リストが完全空のときだけ条件文を非表示にする
     const conditionContainer = document.getElementById("generated-condition-text");
     if (conditionContainer) conditionContainer.classList.add("hidden");
     return;
   }
 
-  // カテゴリごとにグループ化
   const grouped = {};
   currentItems.forEach(item => {
     const cat = item.category || "共通";
@@ -315,7 +307,6 @@ function renderChecklist() {
     listContainer.appendChild(catCard);
   });
 
-  // チェックボックスの変更イベント登録
   listContainer.querySelectorAll(".item-checkbox").forEach(cb => {
     cb.addEventListener("change", async (e) => {
       const id = e.target.dataset.id;
@@ -325,7 +316,6 @@ function renderChecklist() {
         renderChecklist();
         updateProgress();
         
-        // 裏でGASに保存
         await fetch(GAS_API_URL, {
           method: "POST",
           body: JSON.stringify({ action: "save_trip_list", items: currentItems })
@@ -335,7 +325,6 @@ function renderChecklist() {
   });
 }
 
-// 進捗バーの更新
 function updateProgress() {
   if (currentItems.length === 0) {
     if (progressText) progressText.textContent = "0%";
@@ -349,7 +338,7 @@ function updateProgress() {
 }
 
 // ==========================================
-// 5. マスターテンプレート詳細の確認・編集フォーム描画
+// 5. マスター編集フォーム描画
 // ==========================================
 async function renderTemplateDetails(templateName) {
   if (!viewTemplateContent) return;
@@ -357,10 +346,7 @@ async function renderTemplateDetails(templateName) {
   viewTemplateContent.innerHTML = `<div class="p-8 text-center text-slate-400"><i class="fa-solid fa-circle-notch animate-spin text-2xl"></i> スプレッドシートを読み込み中...</div>`;
 
   try {
-    const res = await fetch(`${GAS_API_URL}?action=get_template_items&template=${encodeURIComponent(templateName)}`, {
-      method: "GET",
-      redirect: "follow"
-    });
+    const res = await fetch(`${GAS_API_URL}?action=get_template_items&template=${encodeURIComponent(templateName)}`, { redirect: "follow" });
     const textData = await res.text();
     const items = JSON.parse(textData);
 
@@ -382,10 +368,9 @@ function renderTemplateEditForm() {
     return;
   }
 
-  // カテゴリごとにグループ化
   const grouped = {};
   editingTemplateItems.forEach((item, index) => {
-    item.originalIndex = index; // 最新のインデックスを保持
+    item.originalIndex = index;
     const cat = item.category || "共通";
     if (!grouped[cat]) grouped[cat] = [];
     grouped[cat].push(item);
@@ -439,7 +424,6 @@ function renderTemplateEditForm() {
 }
 
 function setupFormEventListeners() {
-  // 文字・数値入力を配列と即座に同期
   viewTemplateContent.querySelectorAll(".change-name").forEach(el => el.addEventListener("input", (e) => {
     const idx = e.currentTarget.dataset.index;
     if (idx !== undefined && editingTemplateItems[idx]) editingTemplateItems[idx].item_name = e.currentTarget.value;
@@ -457,7 +441,6 @@ function setupFormEventListeners() {
     if (idx !== undefined && editingTemplateItems[idx]) editingTemplateItems[idx].extra_quantity_per_night = parseInt(e.currentTarget.value) || 0;
   }));
 
-  // 個別削除ボタン
   viewTemplateContent.querySelectorAll(".btn-master-delete").forEach(el => el.addEventListener("click", (e) => {
     const idx = e.currentTarget.dataset.index;
     if (idx !== undefined) {
@@ -466,7 +449,6 @@ function setupFormEventListeners() {
     }
   }));
 
-  // 持物追加ボタン
   viewTemplateContent.querySelectorAll(".btn-master-add").forEach(el => el.addEventListener("click", (e) => {
     const cat = e.currentTarget.dataset.category;
     editingTemplateItems.push({
@@ -480,9 +462,8 @@ function setupFormEventListeners() {
   }));
 }
 
-// 新規カテゴリ追加
 function addNewCategoryToTemplate() {
-  const catName = prompt("新しいカテゴリ（家族名など）を入力してください:", "共通");
+  const catName = prompt("新しいカテゴリを入力してください:", "共通");
   if (!catName || !catName.trim()) return;
 
   editingTemplateItems.push({
@@ -496,7 +477,7 @@ function addNewCategoryToTemplate() {
 }
 
 // ==========================================
-// 6. スプレッドシートへ一括保存処理
+// 6. 一括保存処理
 // ==========================================
 async function saveTemplateMaster() {
   const selectEl = document.getElementById("view-template-select");
@@ -508,7 +489,6 @@ async function saveTemplateMaster() {
     return;
   }
 
-  // 空欄の行を安全に自動除外
   const validItems = editingTemplateItems.filter(item => item.item_name && item.item_name.trim());
 
   if (validItems.length === 0) {
@@ -543,7 +523,6 @@ async function saveTemplateMaster() {
     if (result.error) throw new Error(result.error);
 
     alert("🎉 スプレッドシート（" + templateName + " シート）へ正常に保存しました！");
-
     await renderTemplateDetails(templateName);
 
   } catch (err) {
